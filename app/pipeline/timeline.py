@@ -2,9 +2,11 @@
 
 Two layers (see PLANNING.md):
   1. Baseline curve  — Steam's review histogram, full history, free.
-  2. Event windows   — for recent reachable Steam-News events, a ±N-day window of
-                       sampled review text scored by the approval Measure (LLM),
-                       giving each event a before/after delta + drivers.
+  2. Event windows   — Steam-News events are chained into rolling groups, each
+                       analyzed over an asymmetric window (1 week before the
+                       burst, 3 weeks after the last event in it). Sampled review
+                       text is scored by the approval Measure (LLM), giving each
+                       group a before/after delta + drivers.
 """
 from __future__ import annotations
 
@@ -76,32 +78,69 @@ async def get_events(appid: int, *, launch_ts: int | None, count: int = 50) -> l
 _TYPE_RANK = {"launch": 3, "patch": 2, "announcement": 1}
 
 
-def cluster_events(events: list[dict[str, Any]], *, window_days: int) -> list[dict[str, Any]]:
-    """Collapse events that fall within one analysis window into one anchor.
+def _now_ts() -> int:
+    return int(datetime.now(tz=timezone.utc).timestamp())
 
-    Steam often gets several posts the same day (a marketing blitz); analyzing
-    each gives near-identical, overlapping windows. We group runs whose adjacent
-    gap <= window_days and keep the most informative post (patch/launch > note)
-    as the anchor, recording how many were merged.
+
+def group_events(
+    events: list[dict[str, Any]],
+    *,
+    chain_gap_days: int = 7,
+    before_days: int = 7,
+    after_days: int = 21,
+) -> list[dict[str, Any]]:
+    """Chain events into rolling analysis groups (asymmetric windows).
+
+    Walk chronologically and keep absorbing the next event while it lands within
+    `chain_gap_days` of the previous one — so a same-day post blitz AND a run of
+    weekly patches both merge into one group. Each group's analysis window is
+    [first_event - before_days, last_event + after_days]; every absorbed event
+    pushes the tail out so the latest event still gets its full `after_days`.
+
+    The anchor (for the marker/label) is the most informative member
+    (patch/launch > announcement), tie-broken to the earliest — the trigger.
     """
     if not events:
         return []
-    win = window_days * DAY
-    clusters: list[list[dict[str, Any]]] = [[events[0]]]
-    for ev in events[1:]:  # newest-first
-        if clusters[-1][-1]["ts"] - ev["ts"] <= win:
-            clusters[-1].append(ev)
+    asc = sorted(events, key=lambda e: e["ts"])
+    gap = chain_gap_days * DAY
+    runs: list[list[dict[str, Any]]] = [[asc[0]]]
+    for ev in asc[1:]:
+        if ev["ts"] - runs[-1][-1]["ts"] <= gap:
+            runs[-1].append(ev)
         else:
-            clusters.append([ev])
+            runs.append([ev])
 
-    out: list[dict[str, Any]] = []
-    for group in clusters:
-        anchor = max(group, key=lambda e: (_TYPE_RANK.get(e["type"], 0), e["ts"]))
-        merged = {**anchor, "merged_count": len(group)}
-        if len(group) > 1:
-            merged["title"] = f'{anchor["title"]} (+{len(group) - 1} related posts)'
-        out.append(merged)
-    return out
+    now = _now_ts()
+    groups: list[dict[str, Any]] = []
+    for members in runs:
+        first_ts, last_ts = members[0]["ts"], members[-1]["ts"]
+        anchor = max(members, key=lambda e: (_TYPE_RANK.get(e["type"], 0), -e["ts"]))
+        win_start = first_ts - before_days * DAY
+        win_end = last_ts + after_days * DAY
+        title = anchor["title"]
+        if len(members) > 1:
+            title = f'{anchor["title"]} (+{len(members) - 1} more)'
+        groups.append({
+            "ts": anchor["ts"],
+            "date": _iso(anchor["ts"]),
+            "title": title,
+            "type": anchor["type"],
+            "n_events": len(members),
+            "first_ts": first_ts,
+            "last_ts": last_ts,
+            "members": [
+                {"date": m["date"], "title": m["title"], "type": m["type"]} for m in members
+            ],
+            "window": {
+                "start_ts": win_start, "end_ts": win_end,
+                "start_date": _iso(win_start), "end_date": _iso(win_end),
+                "before_days": before_days, "after_days": after_days,
+                "truncated": win_end > now,
+            },
+        })
+    groups.sort(key=lambda g: g["ts"], reverse=True)  # newest first
+    return groups
 
 
 def _ratio(reviews: list[dict[str, Any]]) -> float | None:
@@ -112,24 +151,22 @@ def _ratio(reviews: list[dict[str, Any]]) -> float | None:
 
 async def analyze_events(
     appid: int,
-    events: list[dict[str, Any]],
+    groups: list[dict[str, Any]],
     *,
     measure: Measure,
-    window_days: int = 5,
     max_events: int = 6,
     max_pages: int = 60,
     min_reviews: int = 5,
 ) -> dict[str, Any]:
-    """Walk reviews backward once, score each recent event's ±window_days slice.
+    """Walk reviews backward once, score each recent event group's window.
 
-    Crawls just deep enough to cover the most-recent `max_events` events
-    (bounded by `max_pages` as a safety cap), so popular titles don't trigger a
-    full-history crawl.
+    `max_events` here counts event *groups*. Delta compares the week before the
+    burst (window_start .. first_event) against the tail after it
+    (last_event .. window_end); the burst interior feeds the LLM but not the
+    delta halves.
     """
-    win = window_days * DAY
-    # Cutoff = how far back we must reach to cover the targeted recent events.
-    target = events[:max_events] if max_events else events
-    until_ts = (min(e["ts"] for e in target) - win) if target else None
+    target = groups[:max_events] if max_events else groups
+    until_ts = min((g["window"]["start_ts"] for g in target), default=None)
 
     walked: list[dict[str, Any]] = []
     async for rev in steam.iter_reviews(appid, max_pages=max_pages, until_ts=until_ts):
@@ -141,33 +178,38 @@ async def analyze_events(
         "newest_review_ts": max((r["timestamp"] for r in walked), default=None),
     }
     oldest = coverage["oldest_review_ts"]
+    now = _now_ts()
     analyzed = 0
 
-    for ev in events:  # newest first
-        ev["analysis"] = None
+    for g in groups:  # newest first
+        g["analysis"] = None
         if analyzed >= max_events or oldest is None:
             continue
-        lo, hi = ev["ts"] - win, ev["ts"] + win
-        if hi < oldest:  # event window predates everything we reached
+        w = g["window"]
+        if w["end_ts"] < oldest:  # whole window predates what we crawled
             continue
-        window_reviews = [r for r in walked if lo <= r["timestamp"] <= hi]
+        window_reviews = [r for r in walked if w["start_ts"] <= r["timestamp"] <= w["end_ts"]]
         if len(window_reviews) < min_reviews:
             continue
 
-        before = [r for r in window_reviews if r["timestamp"] < ev["ts"]]
-        after = [r for r in window_reviews if r["timestamp"] >= ev["ts"]]
+        before = [r for r in window_reviews if r["timestamp"] < g["first_ts"]]
+        after = [r for r in window_reviews if r["timestamp"] > g["last_ts"]]
         b, a = _ratio(before), _ratio(after)
         scored = await measure.compute(window_reviews)
-        ev["analysis"] = {
+        after_observed = max(0, min(w["end_ts"], now) - g["last_ts"]) / DAY
+        g["analysis"] = {
             **scored,
             "approval_steam_before": b,
             "approval_steam_after": a,
+            "n_before": len(before),
+            "n_after": len(after),
             "delta": (a - b) if (a is not None and b is not None) else None,
-            "window_days": window_days,
+            "after_days_observed": round(after_observed, 1),
+            "window_truncated": w["truncated"],
         }
         analyzed += 1
 
-    return {"events": events, "coverage": coverage, "events_analyzed": analyzed}
+    return {"events": groups, "coverage": coverage, "events_analyzed": analyzed}
 
 
 async def build_timeline(
@@ -175,17 +217,21 @@ async def build_timeline(
     *,
     name: str | None = None,
     use_llm: bool = True,
-    window_days: int = 5,
+    before_days: int = 7,
+    after_days: int = 21,
+    chain_gap_days: int = 7,
     max_events: int = 6,
-    max_pages: int = 20,
+    max_pages: int = 60,
 ) -> dict[str, Any]:
     baseline = await build_baseline(appid)
     events = await get_events(appid, launch_ts=baseline.get("start_ts"))
-    events = cluster_events(events, window_days=window_days)
+    groups = group_events(
+        events, chain_gap_days=chain_gap_days,
+        before_days=before_days, after_days=after_days,
+    )
     measure = ApprovalMeasure(use_llm=use_llm)
     analysis = await analyze_events(
-        appid, events, measure=measure, window_days=window_days,
-        max_events=max_events, max_pages=max_pages,
+        appid, groups, measure=measure, max_events=max_events, max_pages=max_pages,
     )
     return {
         "appid": appid,
@@ -193,6 +239,10 @@ async def build_timeline(
         "generated_at": datetime.now(tz=timezone.utc).isoformat(),
         "measure": measure.name,
         "used_llm": use_llm,
+        "window": {
+            "before_days": before_days, "after_days": after_days,
+            "chain_gap_days": chain_gap_days,
+        },
         "baseline": baseline,
         "events": analysis["events"],
         "coverage": analysis["coverage"],

@@ -54,6 +54,18 @@ def _svg(timeline: dict[str, Any]) -> str:
     poly = " ".join(f"{_x(p['ts'], t0, t1):.1f},{_y(p['approval']):.1f}" for p in pts)
     parts.append(f'<polyline points="{poly}" class="curve"/>')
 
+    # analyzed window bands (drawn under markers): shows the asymmetric window
+    for ev in timeline["events"]:
+        if ev.get("analysis") is None:
+            continue
+        w = ev["window"]
+        xs = _x(max(w["start_ts"], t0), t0, t1)
+        xe = _x(min(w["end_ts"], t1), t0, t1)
+        if xe > xs:
+            parts.append(
+                f'<rect x="{xs:.1f}" y="{PAD_T}" width="{xe-xs:.1f}" height="{PLOT_H}" class="band"/>'
+            )
+
     # event markers
     for ev in timeline["events"]:
         if ev["ts"] < t0 or ev["ts"] > t1:
@@ -62,6 +74,8 @@ def _svg(timeline: dict[str, Any]) -> str:
         analyzed = ev.get("analysis") is not None
         cls = "ev analyzed" if analyzed else "ev"
         tip = f'{ev["date"]} · {ev["title"]}'
+        if ev.get("n_events", 1) > 1:
+            tip += f' · {ev["n_events"]} posts'
         if analyzed:
             a = ev["analysis"]
             llm = a.get("approval_llm")
@@ -100,6 +114,13 @@ def _event_cards(timeline: dict[str, Any]) -> str:
             f'{html.escape(str(d.get("aspect","")))}</li>'
             for d in a.get("drivers", [])
         )
+        w = ev.get("window", {})
+        span = f'{w.get("start_date","?")} → {w.get("end_date","?")}'
+        merged = f' · {ev["n_events"]} posts' if ev.get("n_events", 1) > 1 else ""
+        trunc = ""
+        if a.get("window_truncated"):
+            trunc = (f' <span class="warn">(after-window only {a.get("after_days_observed","?")}d '
+                     f'of {w.get("after_days","?")}d so far)</span>')
         cards.append(f"""
         <div class="card">
           <div class="card-head">
@@ -107,11 +128,12 @@ def _event_cards(timeline: dict[str, Any]) -> str:
             <span class="ev-title">{html.escape(ev['title'])}</span>
             <span class="ev-date">{ev['date']}</span>
           </div>
+          <div class="span">{span}{merged}{trunc}</div>
           <div class="metrics">
             <span>Approval (LLM): <b>{llm_html}</b></span>
-            <span>Steam before→after: {delta_html or '—'}</span>
+            <span>Steam Δ (before→after): {delta_html or '—'}</span>
             <span>Divisiveness: <b>{div_html}</b></span>
-            <span>n={a.get('n_reviews', 0)}</span>
+            <span>n={a.get('n_reviews', 0)} (b{a.get('n_before', 0)}/a{a.get('n_after', 0)})</span>
           </div>
           <p class="summary">{html.escape(a.get('summary') or '')}</p>
           <ul class="drivers">{drivers}</ul>
@@ -122,6 +144,7 @@ def _event_cards(timeline: dict[str, Any]) -> str:
 def render_html(timeline: dict[str, Any]) -> str:
     cov = timeline.get("coverage", {})
     walked = cov.get("reviews_walked", 0)
+    win = timeline.get("window", {})
     return f"""<!doctype html>
 <html><head><meta charset="utf-8"><title>{html.escape(timeline['name'])} — Sentiment Journey</title>
 <style>
@@ -135,6 +158,7 @@ def render_html(timeline: dict[str, Any]) -> str:
   .ylab {{ fill:var(--muted); font-size:11px; text-anchor:end; }}
   .xlab {{ fill:var(--muted); font-size:11px; text-anchor:middle; }}
   .curve {{ fill:none; stroke:var(--curve); stroke-width:2; }}
+  .band {{ fill:var(--evon); opacity:0.07; }}
   .ev {{ stroke:var(--ev); stroke-width:1; }} .ev.analyzed {{ stroke:var(--evon); stroke-width:1.5; }}
   .evdot {{ fill:var(--evon); }}
   .cards {{ display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:12px; margin-top:18px; }}
@@ -142,6 +166,8 @@ def render_html(timeline: dict[str, Any]) -> str:
   .card-head {{ display:flex; align-items:center; gap:8px; margin-bottom:8px; }}
   .ev-title {{ font-weight:600; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }}
   .ev-date {{ color:var(--muted); font-size:12px; }}
+  .span {{ color:var(--muted); font-size:12px; margin:-2px 0 8px; }}
+  .warn {{ color:var(--evon); }}
   .badge {{ font-size:10px; text-transform:uppercase; padding:2px 6px; border-radius:5px; background:#222736; color:var(--muted); }}
   .badge.patch {{ background:#1c3a2c; color:var(--up); }} .badge.launch {{ background:#3a2c1c; color:var(--evon); }}
   .metrics {{ display:flex; flex-wrap:wrap; gap:10px 16px; font-size:12px; color:var(--muted); }}
@@ -157,9 +183,10 @@ def render_html(timeline: dict[str, Any]) -> str:
 </style></head>
 <body>
   <h1>{html.escape(timeline['name'])} — Sentiment Journey</h1>
-  <p class="sub">Approval over time (Steam review histogram). Gold markers = LLM-analyzed event
-     windows (±{timeline['events'][0]['analysis']['window_days'] if timeline.get('events_analyzed') else 5}d).
-     Crawled {walked} recent reviews · generated {timeline['generated_at'][:10]}.</p>
+  <p class="sub">Approval over time (Steam review histogram). Gold bands = LLM-analyzed event
+     windows ({win.get('before_days', 7)}d before → {win.get('after_days', 21)}d after; events within
+     {win.get('chain_gap_days', 7)}d chained). Crawled {walked} recent reviews ·
+     generated {timeline['generated_at'][:10]}.</p>
   {_svg(timeline)}
   <div class="cards">{_event_cards(timeline)}</div>
   <script>window.__TIMELINE__ = {json.dumps(timeline)};</script>

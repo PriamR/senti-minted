@@ -33,12 +33,20 @@ comments can't be cleanly date-windowed. So:
    raw thumbs-up ratio can't tell you *which features* moved sentiment, or whether a 60% game is
    calmly mixed vs violently split (divisiveness).
 
-### Bucketing — event-anchored, not fixed calendar
+### Bucketing — event-anchored rolling windows (not fixed calendar)
 Review volume swings from thousands/week at launch to a trickle later, so fixed windows are wrong.
-The histogram gives the continuous baseline; the LLM runs on ±5-day windows anchored to flagged
-events. Same-day post blitzes are clustered into one anchor (`cluster_events`).
-Caveat to revisit: reviews lag playtime a few days, so asymmetric windows (e.g. 5 before / 8–10
-after) are a likely tuning step.
+The histogram gives the continuous baseline; the LLM runs on **asymmetric, rolling** windows
+anchored to flagged events (`group_events`):
+
+- **Window = 1 week before the burst → 3 weeks after the last event in it** (`--before-days 7`,
+  `--after-days 21`). Asymmetric because reviews lag playtime — the reaction accrues for weeks.
+- **Rolling chain:** walking chronologically, events within `--chain-gap-days 7` of the previous
+  one are absorbed into the same group, and each absorbed event pushes the 3-week tail out so the
+  newest still gets its full window. So a same-day post blitz *and* a run of weekly patches each
+  collapse to one group (you can't disentangle weekly patches' effects anyway).
+- **Delta** compares the week before the first event vs the tail after the last; the burst interior
+  feeds the LLM's view but not the delta halves. Very recent groups whose +3-week tail runs past
+  today are flagged `window_truncated` with `after_days_observed`.
 
 ### Cost / reachability (validated)
 Steam has no "reviews between A and B" param, so historical text needs a backward `filter=recent`

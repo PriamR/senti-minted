@@ -26,8 +26,11 @@ async def main() -> int:
     ap.add_argument("appid", type=int, help="Steam appid (e.g. 275850 = No Man's Sky)")
     ap.add_argument("--name", default=None, help="Display name for the product")
     ap.add_argument("--no-llm", action="store_true", help="Histogram curve only (no tokens)")
-    ap.add_argument("--window-days", type=int, default=5, help="±days around each event")
-    ap.add_argument("--max-events", type=int, default=6, help="Most recent events to LLM-analyze")
+    ap.add_argument("--before-days", type=int, default=7, help="Window: days before the burst")
+    ap.add_argument("--after-days", type=int, default=21, help="Window: days after the last event")
+    ap.add_argument("--chain-gap-days", type=int, default=7,
+                    help="Chain events into one group if within this many days")
+    ap.add_argument("--max-events", type=int, default=6, help="Most recent event groups to LLM-analyze")
     ap.add_argument("--max-pages", type=int, default=60, help="Safety cap on review pages (100/page)")
     args = ap.parse_args()
 
@@ -36,7 +39,9 @@ async def main() -> int:
         args.appid,
         name=args.name,
         use_llm=not args.no_llm,
-        window_days=args.window_days,
+        before_days=args.before_days,
+        after_days=args.after_days,
+        chain_gap_days=args.chain_gap_days,
         max_events=args.max_events,
         max_pages=args.max_pages,
     )
