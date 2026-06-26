@@ -117,6 +117,8 @@ def _event_cards(timeline: dict[str, Any]) -> str:
         w = ev.get("window", {})
         span = f'{w.get("start_date","?")} → {w.get("end_date","?")}'
         merged = f' · {ev["n_events"]} posts' if ev.get("n_events", 1) > 1 else ""
+        if ev.get("peak_day_count", 1) > 1:
+            merged += f' (\U0001f4e3 {ev["peak_day_count"]} on {ev["peak_day"]})'
         trunc = ""
         if a.get("window_truncated"):
             trunc = (f' <span class="warn">(after-window only {a.get("after_days_observed","?")}d '

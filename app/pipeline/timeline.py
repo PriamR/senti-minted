@@ -10,6 +10,7 @@ Two layers (see PLANNING.md):
 """
 from __future__ import annotations
 
+from collections import Counter
 from datetime import datetime, timezone
 from typing import Any
 
@@ -121,12 +122,18 @@ def group_events(
         title = anchor["title"]
         if len(members) > 1:
             title = f'{anchor["title"]} (+{len(members) - 1} more)'
+        # Per-day event frequency — flags marketing blitzes (e.g. 5 posts one day).
+        day_counts = Counter(m["date"] for m in members)
+        peak_day, peak_day_count = day_counts.most_common(1)[0]
         groups.append({
             "ts": anchor["ts"],
             "date": _iso(anchor["ts"]),
             "title": title,
             "type": anchor["type"],
             "n_events": len(members),
+            "day_counts": dict(day_counts),
+            "peak_day": peak_day,
+            "peak_day_count": peak_day_count,
             "first_ts": first_ts,
             "last_ts": last_ts,
             "members": [

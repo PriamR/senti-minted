@@ -61,8 +61,8 @@ curve. Deep-history LLM backfill is a one-time cacheable batch job — noted, no
   connection, retry/backoff, `until_ts` adaptive stop), `get_news`.
 - `app/measures/` — `Measure` protocol + `approval.py` (`approval_steam`, `approval_llm`,
   divisiveness, drivers, summary). The seam for extremity / language-spread / etc.
-- `app/pipeline/timeline.py` — `build_baseline`, `get_events`, `cluster_events`, `analyze_events`,
-  `build_timeline`.
+- `app/pipeline/timeline.py` — `build_baseline`, `get_events`, `group_events` (rolling chains +
+  per-day frequency: `day_counts`/`peak_day_count`), `analyze_events`, `build_timeline`.
 - `app/viz.py` — self-contained inline-SVG HTML (curve + event markers + driver cards).
 - `scripts/build_timeline.py` — CLI; writes `data/timeline_<appid>.json` + `out/timeline_<appid>.html`.
 
@@ -71,8 +71,58 @@ curve. Deep-history LLM backfill is a one-time cacheable batch job — noted, no
 ```bash
 python -m scripts.build_timeline 275850 --name "No Man's Sky"            # full (LLM)
 python -m scripts.build_timeline 275850 --name "No Man's Sky" --no-llm   # curve only, no tokens
-# tuning: --window-days 5  --max-events N  --max-pages 60(safety cap)
+# tuning: --before-days 7  --after-days 21  --chain-gap-days 7  --max-events N  --max-pages 60
 ```
+
+## Cross-source entity resolution (Reddit / YouTube → Steam appid)
+
+Discussion sources carry no Steam appid — resolving free text to the right product is the
+genuinely subjective part of the system. Strategy = **deterministic seed, precision-first
+expansion.**
+
+### 1. Resolve the canonical handles (mostly deterministic)
+`appid → IGDB id` is deterministic (`external_games`, verified: 275850 ⟷ 3225). IGDB's `websites`
+list then hands us the official handles directly (verified on NMS):
+- `reddit.com/r/NoMansSkyTheGame` → **official subreddit**
+- `youtube.com/@HelloGamesTube` → **official dev/publisher channel**
+- plus official site, Twitter, Discord, etc.
+
+Classify those links **by URL domain**, not IGDB's `category` enum (it's mid-deprecation —
+`category`→`external_game_source`/`type` — and returns null for websites now). Where IGDB lacks a
+link, fall back to heuristic discovery (below) and cache the result.
+
+### 2. Ground truth = authoritative sources (no matching needed)
+These are ~100% on-topic by construction, so they need no classifier:
+- **Official subreddit**: pull its posts + comments (timestamped via `created_utc`).
+- **Dev/publisher YouTube channel**: channel → uploads playlist → videos whose title/description
+  match the game → `commentThreads`. (Filter videos because a publisher channel covers many games.)
+
+This seed corpus is the **reference** the wild-expansion classifier scores against.
+
+### 3. Wild expansion = needs classification (precision-first)
+Discussion in general subs (r/Games, r/pcgaming) or general YouTube search *does* need a match:
+- **String layer:** canonical name + aliases (IGDB `name` + `alternative_names`) + abbreviations,
+  with an **exclusion list** to kill collisions ("Hades" vs "Hades II", editions, remasters).
+- **Semantic layer:** an LLM (or embedding-similarity-to-seed-centroid) yes/no/confidence call —
+  "is this comment about <game>?" — using a few exemplars drawn from the §2 seed corpus.
+- Store a **confidence** per item; threshold by measure (a sentiment *trend* tolerates noise that
+  averages out; *driver extraction* must lean on §2 ground truth + high-confidence §3 only).
+
+### 4. The resolver module (proposed)
+`app/resolver/` produces and persists a `GameEntity`:
+`{ appid, igdb_id, canonical_name, aliases[], official_subreddit, official_youtube_channel,
+   dev/publisher names, per-link source (igdb|heuristic|manual) + confidence }`,
+backed by a SQLite **entity/alias map** — resolve-once, cache, manual override. Discussion clients
+then take a `GameEntity`: `fetch_ground_truth(entity)` (§2) and `fetch_wild(entity)` (§3).
+
+### Heuristic fallbacks (when IGDB lacks the link)
+- subreddit: Reddit `/subreddits/search` by name → verify via description/subscribers/LLM.
+- channel: YouTube search by publisher name → verify via channel metadata.
+
+### Caveat (retrospective angle)
+Reddit/YouTube remain recency-biased (no deep historical archive), so this layer is **present-day
+cross-validation + recent-event enrichment**, complementing — not replacing — the Steam-review
+historical spine. Top-of-all-time subreddit posts can backfill *some* history.
 
 ## Measures roadmap (same scaffold)
 
