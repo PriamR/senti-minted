@@ -29,7 +29,12 @@ async def search_videos(query: str, *, max_results: int = 5) -> list[dict[str, A
         return resp.json().get("items", [])
 
 
-async def get_comment_threads(video_id: str, *, max_results: int = 20) -> list[dict[str, Any]]:
+async def get_comment_threads(
+    video_id: str, *, max_results: int = 20, order: str = "relevance"
+) -> list[dict[str, Any]]:
+    """Top-level comment threads for a video. order="relevance" (top comments)
+    or "time" (chronological). Each comment carries publishedAt, so timestamps
+    are available regardless of sort. Raises on comments-disabled videos (403)."""
     async with make_client() as client:
         resp = await client.get(
             f"{BASE}/commentThreads",
@@ -38,7 +43,7 @@ async def get_comment_threads(video_id: str, *, max_results: int = 20) -> list[d
                 "videoId": video_id,
                 "part": "snippet",
                 "maxResults": max_results,
-                "order": "relevance",
+                "order": order,
                 "textFormat": "plainText",
             },
         )
