@@ -230,6 +230,8 @@ resolve once, cache, allow manual override.
   presentation moves out of `app/` at that point.
 - **Cross-source cross-validation** — compare Steam-derived approval against Reddit/YouTube reads
   for the same window as a confidence signal.
+- **Agentic query layer (§10)** — a natural-language agent that orchestrates the backend tools and
+  returns grounded KPI summaries, removing the need for a dashboard. The flagship interface goal.
 
 **The generalizable capability underneath** — multi-source entity resolution + aspect-based analysis
 + LLM-safe synthesis — ports to any consumer-feedback vertical (apps, hardware, CPG). The strategy
@@ -237,7 +239,118 @@ is to go deep on one vertical first.
 
 ---
 
-## 10. What this project demonstrates (interview framing)
+## 10. The agentic layer (designed, not yet built)
+
+**Vision:** replace the dashboard with a question. The user asks *"What did No Man's Sky's
+reception look like 2 years in?"* and an agent resolves the product, figures out the relevant
+window, drives the backend, reads the output, and returns a grounded KPI summary plus the chart —
+no filters, no clicking, no knowing what an "appid" is.
+
+### 10.1 Why an agent fits *this* tool specifically
+It's the natural extension of the existing safety principle (§5.4): the LLM **narrates over
+deterministic, pre-computed numbers**. The agent is a *planner* that can only call a small, fixed
+set of key-safe backend tools; every number it reports is a tool result. It never touches raw APIs,
+keys, or invents a metric. That makes the agent's reach auditable by construction.
+
+### 10.2 The agent's tool surface (its entire API)
+A constrained registry — each entry a thin wrapper over functions we already have, exposed to
+DeepSeek as JSON-schema tools for function-calling:
+
+| Tool | Returns | Backs onto |
+|---|---|---|
+| `resolve_product(name)` | `{appid, igdb_id, canonical_name, launch_date, confidence}` | resolver (§6) |
+| `resolve_timeframe(launch_date, phrase)` | `{start, end}` — deterministic date math | helper |
+| `get_approval_curve(appid, start?, end?)` | monthly approval points (free) | `build_baseline` |
+| `get_events(appid, start?, end?)` | event groups in range | `get_events`/`group_events` |
+| `analyze_window(appid, start, end)` | `{approval_steam, approval_llm, drivers, divisiveness, summary, n}` | `analyze_events` + measure |
+| `get_discussion(appid, window, source)` *(later)* | classified Reddit/YouTube items | `ingest/` + classifier |
+
+`resolve_timeframe` exists so the **LLM never does brittle date arithmetic** — it passes the phrase
+("2 years in", "at launch", "first 6 months"), the backend computes the window.
+
+### 10.3 The agent loop (bounded, cheap-first ReAct)
+1. **Parse intent** (LLM): product · timeframe phrase · what's asked (level? trend? *why*? compare?).
+2. `resolve_product` → appid + launch_date (carry the confidence; flag if low).
+3. `resolve_timeframe` → the absolute window.
+4. **Cheap first:** `get_approval_curve` (level + trend) and `get_events` (what happened) — both
+   free.
+5. **Spend only if needed:** if the question wants the *why*/texture, `analyze_window` for
+   drivers + divisiveness (gated, because it costs a crawl + tokens; cached by `(appid, window)`).
+6. **Synthesize** a structured answer object and stop. Hard caps: max tool calls (~6) and a token/
+   crawl budget per question.
+
+### 10.4 Worked trace — *"What did No Man's Sky's reception look like 2 years in?"*
+(Numbers below from `get_approval_curve` are **real**; the `analyze_window` drivers are what that
+tool would add once the historical LLM backfill (§9) is run — the free histogram already carries the
+hard numbers.)
+
+```
+1. resolve_product("No Man's Sky")
+   → { appid: 275850, launch_date: "2016-08-09", confidence: 1.0 }   (IGDB-deterministic)
+2. resolve_timeframe("2016-08-09", "2 years in")
+   → { start: "2018-07-01", end: "2018-09-30" }   (anniversary month, widened to catch the
+                                                    proximate major event)
+3. get_approval_curve(275850, "2018-06", "2018-10")
+   → 2018-07: 84% (n=8,390) · 2018-08: 75% (n=5,517) · 2018-09: 68% (n=615)
+     [context vs launch 2016-08: 47% (n=46,992)]
+4. get_events(275850, "2018-07-01", "2018-09-30")
+   → NEXT update (2018-07-24) — the turnaround event
+5. analyze_window(275850, "2018-07-01", "2018-09-30")          (pending backfill)
+   → drivers: multiplayer↑, base-building↑, "free post-launch support / redemption"↑,
+     lingering launch-promise resentment↓ ; divisiveness ≈ moderate
+```
+
+**Synthesized answer:**
+> Two years in (Aug 2018), No Man's Sky's reception had transformed. Monthly approval sat at **~75%**,
+> up from **47%** at the 2016 launch. The turn came weeks earlier: the **NEXT update (24 Jul 2018)**
+> drove a spike to **84%** approval on **~8,400 reviews** — the biggest monthly wave since launch — as
+> lapsed players returned. Reviews credited NEXT's multiplayer and base-building and a "they actually
+> fixed it" narrative, against residual bitterness about the original launch promises. Net: the
+> product was *mid-comeback* — no longer the cautionary tale of 2016, not yet the ~91% it holds today.
+
+### 10.5 The answer object (auditable, not a black box)
+`{ headline, metrics[], chart_ref, events_cited[], provenance: tool_calls[], assumptions[],
+confidence }`. Provenance lists every tool call and window used, so any claim traces back to a
+deterministic result — and `assumptions` records choices the agent made (e.g. "interpreted '2 years
+in' as the Aug-2018 month, widened to include NEXT").
+
+### 10.6 Guardrails & cost controls
+- **Grounding:** report only tool-returned numbers; if a tool returns nothing, say so — never
+  interpolate.
+- **Cheap-first + budgets:** the free histogram answers level/trend; `analyze_window` is invoked
+  only when the question needs *why*, and is cached.
+- **Clarify-or-default:** ambiguous "reception" defaults to approval + drivers with the assumption
+  stated; only genuinely under-specified queries trigger a clarifying question.
+- **Confidence propagation:** low entity-resolution confidence is surfaced in the answer rather than
+  hidden.
+- **Evaluation harness:** golden `question → expected tool calls + expected claims` cases to catch
+  regressions in planning and grounding.
+
+### 10.7 How it maps to the codebase
+```
+app/agent/
+  tools.py       the tool registry + JSON schemas (the agent's whole surface)
+  controller.py  the bounded tool-calling loop (DeepSeek function-calling)
+  answer.py      the answer-object schema + provenance assembly
+scripts/ask.py   CLI: python -m scripts.ask "What did No Man's Sky's reception look like 2 years in?"
+```
+Reuses the resolver (§6), `pipeline/timeline.py`, and `measures/`. The same controller becomes
+`POST /api/ask {query}` when the FastAPI layer lands (§9) — at which point **the agent *is* the
+interface**, and the "complicated dashboard" never needs to exist.
+
+### 10.8 Open questions / risks
+- **Temporal semantics:** is "2 years in" a point or a span? Default = the anniversary month,
+  widened to capture a proximate major event; configurable.
+- **When to spend:** the planner's call on histogram-only vs invoking `analyze_window` is the main
+  cost lever — needs tuning and guardrails.
+- **Comparative / multi-product queries** ("vs Elite Dangerous") — a second resolve + parallel
+  windows; straightforward but expands the tool contract.
+- **Bad tool arguments / hallucinated appids** — mitigated by schema validation and routing all
+  identity through `resolve_product` (never letting the LLM supply a raw appid).
+
+---
+
+## 11. What this project demonstrates (interview framing)
 
 **Product thinking**
 - Found a defensible wedge (vertical depth + analytical frame) against commoditized horizontal tools.
@@ -258,7 +371,7 @@ is to go deep on one vertical first.
 
 ---
 
-## 11. Tech stack & repo map
+## 12. Tech stack & repo map
 
 **Stack:** Python 3.11 · `httpx` (async) · `python-dotenv` · DeepSeek via the OpenAI-compatible SDK
 · inline-SVG HTML (no frontend framework yet).
@@ -270,9 +383,12 @@ app/
   ingest/              youtube (wild name-search ingestion); reddit (planned)
   measures/            Measure protocol + approval (Steam ratio + LLM drivers/divisiveness)
   pipeline/timeline.py baseline curve + rolling event groups + windowed analysis
+  resolver/            appid ⟷ IGDB ⟷ official handles + entity map        (planned, §6)
+  agent/               tool registry + bounded controller + answer object  (planned, §10)
   viz.py               timeline JSON → self-contained HTML
 scripts/
   build_timeline.py    CLI: appid → data/timeline_<appid>.json + out/<appid>.html
+  ask.py               agent CLI: natural-language question → grounded answer (planned, §10)
   smoke_test.py        one live call per API
 PLANNING.md            working design notes
 README.md              quick start
