@@ -219,6 +219,50 @@ async def analyze_events(
     return {"events": groups, "coverage": coverage, "events_analyzed": analyzed}
 
 
+async def analyze_explicit_window(
+    appid: int,
+    start_ts: int,
+    end_ts: int,
+    *,
+    measure: Measure,
+    max_pages: int = 30,
+    min_reviews: int = 5,
+) -> dict[str, Any]:
+    """Run the measure over an arbitrary [start, end] window of reviews.
+
+    Used by the agent's `analyze_window` tool. Crawls `filter=recent` back to
+    `start_ts` (capped by `max_pages`). If the window predates what the cap can
+    reach, returns `available: False` rather than attempting a full-history crawl
+    — deep history needs the cacheable backfill job (PROJECT_OVERVIEW §9).
+    """
+    walked: list[dict[str, Any]] = []
+    async for rev in steam.iter_reviews(appid, max_pages=max_pages, until_ts=start_ts):
+        walked.append(rev)
+    oldest = min((r["timestamp"] for r in walked), default=None)
+    if oldest is None:
+        return {"available": False, "reason": "no reviews returned"}
+    if end_ts < oldest:
+        return {
+            "available": False,
+            "reason": "window predates the reachable crawl; needs historical backfill",
+            "reached_back_to": _iso(oldest),
+        }
+    window_reviews = [r for r in walked if start_ts <= r["timestamp"] <= end_ts]
+    if len(window_reviews) < min_reviews:
+        return {
+            "available": False,
+            "reason": f"only {len(window_reviews)} reviews in window",
+            "reached_back_to": _iso(oldest),
+        }
+    scored = await measure.compute(window_reviews)
+    return {
+        "available": True,
+        "approval_steam": _ratio(window_reviews),
+        **scored,
+        "window": {"start": _iso(start_ts), "end": _iso(end_ts)},
+    }
+
+
 async def build_timeline(
     appid: int,
     *,

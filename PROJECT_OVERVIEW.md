@@ -201,6 +201,7 @@ resolve once, cache, allow manual override.
 | Self-contained HTML visualization | ✅ curve + window bands + driver cards |
 | Entity resolution: appid ⟷ IGDB ⟷ official handles | ✅ verified (275850 ⟷ 3225 → handles) |
 | YouTube wild ingestion (top comments, name search) | ✅ 10 videos → 150 comments |
+| **Agentic query layer** (NL question → grounded answer) | ✅ v1 — tool-calling loop, provenance, verified on NMS |
 | Version control | ✅ clean repo, secrets gitignored |
 
 **Concrete verified run (No Man's Sky):**
@@ -239,12 +240,19 @@ is to go deep on one vertical first.
 
 ---
 
-## 10. The agentic layer (designed, not yet built)
+## 10. The agentic layer (v1 built)
 
 **Vision:** replace the dashboard with a question. The user asks *"What did No Man's Sky's
 reception look like 2 years in?"* and an agent resolves the product, figures out the relevant
 window, drives the backend, reads the output, and returns a grounded KPI summary plus the chart —
 no filters, no clicking, no knowing what an "appid" is.
+
+> **Status — v1 is built and verified** (`app/agent/`, `app/resolver/`, `scripts/ask.py`). The full
+> tool surface, the bounded controller (DeepSeek function-calling), and provenance all work. Live
+> verification on No Man's Sky: the "2 years in" query returns the real curve (84%→75%→68%); a
+> "recently, and why" query drives `analyze_window` to a live LLM read of ~3,000 reviews with
+> drivers + divisiveness. Still minimal: the resolver is live-resolution (no SQLite map yet), and
+> `analyze_window` is gated to recent windows pending the historical backfill.
 
 ### 10.1 Why an agent fits *this* tool specifically
 It's the natural extension of the existing safety principle (§5.4): the LLM **narrates over
@@ -316,7 +324,9 @@ in' as the Aug-2018 month, widened to include NEXT").
 
 ### 10.6 Guardrails & cost controls
 - **Grounding:** report only tool-returned numbers; if a tool returns nothing, say so — never
-  interpolate.
+  interpolate. *(Observed nuance: when `get_events` returns nothing for an old window, the model may
+  still name a known event (e.g. the NEXT update) from world knowledge — it hedges it, but a strict
+  "tools-only" mode is a planned config so the agent can be locked to verifiable facts for demos.)*
 - **Cheap-first + budgets:** the free histogram answers level/trend; `analyze_window` is invoked
   only when the question needs *why*, and is cached.
 - **Clarify-or-default:** ambiguous "reception" defaults to approval + drivers with the assumption
