@@ -1,0 +1,788 @@
+[
+ {
+  "ts": 1791815261,
+  "date": "2026-10-12",
+  "title": "No Man's Sky coming to iPhone and iPad",
+  "type": "announcement"
+ },
+ {
+  "ts": 1789631316,
+  "date": "2026-09-17",
+  "title": "\"Our Journey Continues\" 10th Anniversary Expedition",
+  "type": "patch"
+ },
+ {
+  "ts": 1788958812,
+  "date": "2026-09-09",
+  "title": "A complete overhaul to space arrives in the form of No Man's Sky COSMOS (7.0)",
+  "type": "announcement"
+ },
+ {
+  "ts": 1786368164,
+  "date": "2026-08-10",
+  "title": "Celebrating 10 Years (!) of No Man's Sky",
+  "type": "announcement"
+ },
+ {
+  "ts": 1779886954,
+  "date": "2026-05-27",
+  "title": "Introducing..No Man's Sky: The Swarm",
+  "type": "announcement"
+ },
+ {
+  "ts": 1775653347,
+  "date": "2026-04-08",
+  "title": "Introducing No Man's Sky Xeno Arena",
+  "type": "announcement"
+ },
+ {
+  "ts": 1770818618,
+  "date": "2026-02-11",
+  "title": "Introducing...No Man's Sky Remnant!",
+  "type": "announcement"
+ },
+ {
+  "ts": 1766093438,
+  "date": "2025-12-18",
+  "title": "Limited Winter Edition Traveller and Gek Plushies Now Available",
+  "type": "announcement"
+ },
+ {
+  "ts": 1764007278,
+  "date": "2025-11-24",
+  "title": "2025 - one of our biggest yet!",
+  "type": "announcement"
+ },
+ {
+  "ts": 1762511294,
+  "date": "2025-11-07",
+  "title": "Announcing..the 2025 Expedition Reduxes",
+  "type": "patch"
+ },
+ {
+  "ts": 1761137924,
+  "date": "2025-10-22",
+  "title": "Introducing...No Man's Sky Breach",
+  "type": "announcement"
+ },
+ {
+  "ts": 1756299990,
+  "date": "2025-08-27",
+  "title": "Introducing...No Man's Sky: Voyagers",
+  "type": "announcement"
+ },
+ {
+  "ts": 1754819511,
+  "date": "2025-08-10",
+  "title": "Celebrating our 9th Anniversary with Gek and Traveller Plushies!",
+  "type": "announcement"
+ },
+ {
+  "ts": 1749042927,
+  "date": "2025-06-04",
+  "title": "Introducing...No Man's Sky BEACON",
+  "type": "announcement"
+ },
+ {
+  "ts": 1742998349,
+  "date": "2025-03-26",
+  "title": "Introducing...No Man's Sky: RELICS",
+  "type": "announcement"
+ },
+ {
+  "ts": 1739378193,
+  "date": "2025-02-12",
+  "title": "Expedition 17: \"Titan\" Now Live!",
+  "type": "patch"
+ },
+ {
+  "ts": 1738165592,
+  "date": "2025-01-29",
+  "title": "Introducing...Worlds Part II",
+  "type": "announcement"
+ },
+ {
+  "ts": 1736332885,
+  "date": "2025-01-08",
+  "title": "Aquarius Expedition back for a limited time only",
+  "type": "patch"
+ },
+ {
+  "ts": 1734026629,
+  "date": "2024-12-12",
+  "title": "Limited edition \"Starborn Phoenix\" to celebrate our TGA Community Support nod!",
+  "type": "announcement"
+ },
+ {
+  "ts": 1732793067,
+  "date": "2024-11-28",
+  "title": "Feeling \"VERY POSITIVE\"",
+  "type": "announcement"
+ },
+ {
+  "ts": 1732716674,
+  "date": "2024-11-27",
+  "title": "2024 Expedition Reduxes are now on!",
+  "type": "patch"
+ },
+ {
+  "ts": 1730994288,
+  "date": "2024-11-07",
+  "title": "Cross-Save, PS5 Pro and...the return of the Normandy!",
+  "type": "announcement"
+ },
+ {
+  "ts": 1729688597,
+  "date": "2024-10-23",
+  "title": "Introducing..The Cursed Expedition!",
+  "type": "patch"
+ },
+ {
+  "ts": 1725455840,
+  "date": "2024-09-04",
+  "title": "Introducing...No Man's Sky Aquarius",
+  "type": "announcement"
+ },
+ {
+  "ts": 1721222559,
+  "date": "2024-07-17",
+  "title": "Introducing Worlds Part I - the 5.0 update",
+  "type": "patch"
+ },
+ {
+  "ts": 1716987660,
+  "date": "2024-05-29",
+  "title": "The Adrift Expedition is now on!",
+  "type": "patch"
+ },
+ {
+  "ts": 1711549609,
+  "date": "2024-03-27",
+  "title": "Introducing...No Man's Sky: ORBITAL",
+  "type": "announcement"
+ },
+ {
+  "ts": 1708013185,
+  "date": "2024-02-15",
+  "title": "Introducing..the OMEGA update!",
+  "type": "patch"
+ },
+ {
+  "ts": 1702570376,
+  "date": "2023-12-14",
+  "title": "The Next Ten Years",
+  "type": "announcement"
+ },
+ {
+  "ts": 1702144669,
+  "date": "2023-12-09",
+  "title": "2023 Expedition Holiday Redux",
+  "type": "patch"
+ },
+ {
+  "ts": 1700639553,
+  "date": "2023-11-22",
+  "title": "Seven years in. One of our biggest yet!",
+  "type": "announcement"
+ },
+ {
+  "ts": 1693563988,
+  "date": "2023-09-01",
+  "title": "Expedition 11 - Voyagers - Now Live!",
+  "type": "patch"
+ },
+ {
+  "ts": 1692883894,
+  "date": "2023-08-24",
+  "title": "Introducing...No Man's Sky Echoes",
+  "type": "announcement"
+ },
+ {
+  "ts": 1692364897,
+  "date": "2023-08-18",
+  "title": "Celebrating 7 years of No Man's Sky",
+  "type": "announcement"
+ },
+ {
+  "ts": 1686143930,
+  "date": "2023-06-07",
+  "title": "The Singularity Expedition Starts Today!",
+  "type": "patch"
+ },
+ {
+  "ts": 1685632919,
+  "date": "2023-06-01",
+  "title": "Introducing...No Man's Sky for Mac",
+  "type": "announcement"
+ },
+ {
+  "ts": 1680713267,
+  "date": "2023-04-05",
+  "title": "Introducing...the INTERCEPTOR Update",
+  "type": "patch"
+ },
+ {
+  "ts": 1678281318,
+  "date": "2023-03-08",
+  "title": "FRACTAL 4.13",
+  "type": "announcement"
+ },
+ {
+  "ts": 1677851532,
+  "date": "2023-03-03",
+  "title": "FRACTAL 4.12.1",
+  "type": "announcement"
+ },
+ {
+  "ts": 1677074761,
+  "date": "2023-02-22",
+  "title": "No Man's Sky Fractal Update",
+  "type": "patch"
+ },
+ {
+  "ts": 1669213655,
+  "date": "2022-11-23",
+  "title": "Announcing...a Return of the 2022 Community Expeditions for the Holidays.",
+  "type": "patch"
+ },
+ {
+  "ts": 1665148694,
+  "date": "2022-10-07",
+  "title": "Introducing...the Waypoint (4.0) Update",
+  "type": "patch"
+ },
+ {
+  "ts": 1658920667,
+  "date": "2022-07-27",
+  "title": "No Man's Sky 8th Expedition, Polestar, now live!",
+  "type": "patch"
+ },
+ {
+  "ts": 1658324532,
+  "date": "2022-07-20",
+  "title": "No Man's Sky Endurance Update",
+  "type": "patch"
+ },
+ {
+  "ts": 1653483798,
+  "date": "2022-05-25",
+  "title": "No Man's Sky Expedition Seven: Leviathan",
+  "type": "patch"
+ },
+ {
+  "ts": 1649944141,
+  "date": "2022-04-14",
+  "title": "Expedition Six: The Blighted",
+  "type": "patch"
+ },
+ {
+  "ts": 1649854936,
+  "date": "2022-04-13",
+  "title": "No Man's Sky Outlaws Update",
+  "type": "patch"
+ },
+ {
+  "ts": 1645773086,
+  "date": "2022-02-25",
+  "title": "Exobiology Expedition now live",
+  "type": "patch"
+ },
+ {
+  "ts": 1645023570,
+  "date": "2022-02-16",
+  "title": "No Man's Sky Sentinel Update",
+  "type": "patch"
+ },
+ {
+  "ts": 1639052188,
+  "date": "2021-12-09",
+  "title": "\"Beachhead\" Expedition Revisited - The One With The Normandy",
+  "type": "patch"
+ },
+ {
+  "ts": 1638444253,
+  "date": "2021-12-02",
+  "title": "Pioneers Expedition Revisited",
+  "type": "patch"
+ },
+ {
+  "ts": 1637776859,
+  "date": "2021-11-24",
+  "title": "Missed any of this year's expeditions? Here's one last chance to jump in!",
+  "type": "patch"
+ },
+ {
+  "ts": 1634734941,
+  "date": "2021-10-20",
+  "title": "No Man's Sky Expedition 4: Emergence",
+  "type": "patch"
+ },
+ {
+  "ts": 1633624217,
+  "date": "2021-10-07",
+  "title": "The Last Campfire - OUT NOW!",
+  "type": "announcement"
+ },
+ {
+  "ts": 1633099062,
+  "date": "2021-10-01",
+  "title": "The Last Campfire launches on Steam next week. Play the Free Demo Today!",
+  "type": "announcement"
+ },
+ {
+  "ts": 1631106164,
+  "date": "2021-09-08",
+  "title": "Cartographers Expedition now LIVE!",
+  "type": "patch"
+ },
+ {
+  "ts": 1630506948,
+  "date": "2021-09-01",
+  "title": "Introducing...No Man's Sky Frontiers",
+  "type": "announcement"
+ },
+ {
+  "ts": 1628612172,
+  "date": "2021-08-10",
+  "title": "No Man's Sky Celebrates 5th Anniversary",
+  "type": "announcement"
+ },
+ {
+  "ts": 1622639059,
+  "date": "2021-06-02",
+  "title": "Announcing...No Man's Sky Prisms",
+  "type": "announcement"
+ },
+ {
+  "ts": 1621612320,
+  "date": "2021-05-21",
+  "title": "No Man's Sky x Mass Effect",
+  "type": "announcement"
+ },
+ {
+  "ts": 1617201484,
+  "date": "2021-03-31",
+  "title": "No Man's Sky Expeditions Update",
+  "type": "patch"
+ },
+ {
+  "ts": 1613745950,
+  "date": "2021-02-19",
+  "title": "No Man's Sky Companions Patch 3.21",
+  "type": "patch"
+ },
+ {
+  "ts": 1613571975,
+  "date": "2021-02-17",
+  "title": "No Man's Sky Companions Update",
+  "type": "patch"
+ },
+ {
+  "ts": 1608660046,
+  "date": "2020-12-22",
+  "title": "Phew, what a year!",
+  "type": "announcement"
+ },
+ {
+  "ts": 1606327274,
+  "date": "2020-11-25",
+  "title": "No Man's Sky - a look back on our biggest year yet!",
+  "type": "announcement"
+ },
+ {
+  "ts": 1603905282,
+  "date": "2020-10-28",
+  "title": "No Man's Sky Next Generation Update",
+  "type": "patch"
+ },
+ {
+  "ts": 1603730260,
+  "date": "2020-10-26",
+  "title": "Halloween Update",
+  "type": "patch"
+ },
+ {
+  "ts": 1600880193,
+  "date": "2020-09-23",
+  "title": "No Man's Sky Origins Update",
+  "type": "patch"
+ },
+ {
+  "ts": 1600441809,
+  "date": "2020-09-18",
+  "title": "No Man's Sky - Update Incoming!",
+  "type": "patch"
+ },
+ {
+  "ts": 1594907455,
+  "date": "2020-07-16",
+  "title": "No Man's Sky Desolation Update",
+  "type": "patch"
+ },
+ {
+  "ts": 1591979120,
+  "date": "2020-06-12",
+  "title": "Crossplay Patch 2.52",
+  "type": "patch"
+ },
+ {
+  "ts": 1591871984,
+  "date": "2020-06-11",
+  "title": "Introducing...Cross Play!",
+  "type": "announcement"
+ },
+ {
+  "ts": 1587045000,
+  "date": "2020-04-16",
+  "title": "Exo Mech Patch 2.42",
+  "type": "patch"
+ },
+ {
+  "ts": 1586271098,
+  "date": "2020-04-07",
+  "title": "No Man's Sky Exo Mech Update",
+  "type": "patch"
+ },
+ {
+  "ts": 1582121410,
+  "date": "2020-02-19",
+  "title": "No Man's Sky Living Ship Update",
+  "type": "patch"
+ },
+ {
+  "ts": 1579712942,
+  "date": "2020-01-22",
+  "title": "Beyond Development Update 6",
+  "type": "patch"
+ },
+ {
+  "ts": 1576516629,
+  "date": "2019-12-16",
+  "title": "Introducing...ByteBeat!",
+  "type": "announcement"
+ },
+ {
+  "ts": 1575055445,
+  "date": "2019-11-29",
+  "title": "Nominate No Man's Sky!",
+  "type": "announcement"
+ },
+ {
+  "ts": 1574956665,
+  "date": "2019-11-28",
+  "title": "No Man's Sky Synthesis Update",
+  "type": "patch"
+ },
+ {
+  "ts": 1572452381,
+  "date": "2019-10-30",
+  "title": "BEYOND DEVELOPMENT UPDATE 3",
+  "type": "patch"
+ },
+ {
+  "ts": 1568807835,
+  "date": "2019-09-18",
+  "title": "Development Update 2",
+  "type": "patch"
+ },
+ {
+  "ts": 1565868597,
+  "date": "2019-08-15",
+  "title": "No Man's Sky BEYOND - OUT NOW!",
+  "type": "announcement"
+ },
+ {
+  "ts": 1565282136,
+  "date": "2019-08-08",
+  "title": "No Man's Sky BEYOND Launch Trailer",
+  "type": "announcement"
+ },
+ {
+  "ts": 1564767646,
+  "date": "2019-08-02",
+  "title": "No Man's Sky BEYOND Release Announce",
+  "type": "patch"
+ },
+ {
+  "ts": 1553551297,
+  "date": "2019-03-25",
+  "title": "No Man's Sky Beyond - Virtual Reality",
+  "type": "announcement"
+ },
+ {
+  "ts": 1552661708,
+  "date": "2019-03-15",
+  "title": "No Man's Sky Beyond",
+  "type": "announcement"
+ },
+ {
+  "ts": 1544713772,
+  "date": "2018-12-13",
+  "title": "Development Update 10",
+  "type": "patch"
+ },
+ {
+  "ts": 1543514153,
+  "date": "2018-11-29",
+  "title": "Development Update 9",
+  "type": "patch"
+ },
+ {
+  "ts": 1542897327,
+  "date": "2018-11-22",
+  "title": "No Man's Sky Visions Out Now",
+  "type": "announcement"
+ },
+ {
+  "ts": 1542819355,
+  "date": "2018-11-21",
+  "title": "No Man's Sky Visions",
+  "type": "announcement"
+ },
+ {
+  "ts": 1541176288,
+  "date": "2018-11-02",
+  "title": "Development Update 8",
+  "type": "patch"
+ },
+ {
+  "ts": 1540831400,
+  "date": "2018-10-29",
+  "title": "No Man's Sky The Abyss Release",
+  "type": "patch"
+ },
+ {
+  "ts": 1540307030,
+  "date": "2018-10-23",
+  "title": "No Man's Sky The Abyss",
+  "type": "announcement"
+ },
+ {
+  "ts": 1539949467,
+  "date": "2018-10-19",
+  "title": "Development Update 7",
+  "type": "patch"
+ },
+ {
+  "ts": 1539366276,
+  "date": "2018-10-12",
+  "title": "Developer Update 6",
+  "type": "patch"
+ },
+ {
+  "ts": 1538751112,
+  "date": "2018-10-05",
+  "title": "Development Update 5",
+  "type": "patch"
+ },
+ {
+  "ts": 1538064264,
+  "date": "2018-09-27",
+  "title": "Development Update - 1.61",
+  "type": "patch"
+ },
+ {
+  "ts": 1537452811,
+  "date": "2018-09-20",
+  "title": "Development Update - 1.60",
+  "type": "patch"
+ },
+ {
+  "ts": 1536343368,
+  "date": "2018-09-07",
+  "title": "Development Update - 1.59",
+  "type": "patch"
+ },
+ {
+  "ts": 1534525567,
+  "date": "2018-08-17",
+  "title": "NEXT Update 1.57",
+  "type": "patch"
+ },
+ {
+  "ts": 1533639493,
+  "date": "2018-08-07",
+  "title": "NEXT Update 1.54",
+  "type": "patch"
+ },
+ {
+  "ts": 1533206409,
+  "date": "2018-08-02",
+  "title": "NEXT Update 1.53",
+  "type": "patch"
+ },
+ {
+  "ts": 1532703246,
+  "date": "2018-07-27",
+  "title": "NEXT Update 1.52",
+  "type": "patch"
+ },
+ {
+  "ts": 1532630855,
+  "date": "2018-07-26",
+  "title": "NEXT Update 1.51",
+  "type": "patch"
+ },
+ {
+  "ts": 1531858202,
+  "date": "2018-07-17",
+  "title": "No Man's Sky NEXT Trailer",
+  "type": "announcement"
+ },
+ {
+  "ts": 1526659314,
+  "date": "2018-05-18",
+  "title": "No Man's Sky NEXT Multiplayer and Release Date",
+  "type": "patch"
+ },
+ {
+  "ts": 1522341399,
+  "date": "2018-03-29",
+  "title": "No Man's Sky NEXT",
+  "type": "announcement"
+ },
+ {
+  "ts": 1507024490,
+  "date": "2017-10-03",
+  "title": "Atlas Rises Patch 1.38",
+  "type": "patch"
+ },
+ {
+  "ts": 1505494866,
+  "date": "2017-09-15",
+  "title": "Atlas Rises Patch 1.37",
+  "type": "patch"
+ },
+ {
+  "ts": 1504284900,
+  "date": "2017-09-01",
+  "title": "Atlas Rises Patch 1.35",
+  "type": "patch"
+ },
+ {
+  "ts": 1503672166,
+  "date": "2017-08-25",
+  "title": "Atlas Rises Patch 1.34",
+  "type": "patch"
+ },
+ {
+  "ts": 1503415415,
+  "date": "2017-08-22",
+  "title": "Atlas Rises Patch 1.33 Live",
+  "type": "patch"
+ },
+ {
+  "ts": 1502990840,
+  "date": "2017-08-17",
+  "title": "Atlas Rises Patch 1.32",
+  "type": "patch"
+ },
+ {
+  "ts": 1502621410,
+  "date": "2017-08-13",
+  "title": "Atlas Rises Patch 1.31",
+  "type": "patch"
+ },
+ {
+  "ts": 1502465480,
+  "date": "2017-08-11",
+  "title": "Update 1.3: Atlas Rises - Out Now",
+  "type": "patch"
+ },
+ {
+  "ts": 1502453939,
+  "date": "2017-08-11",
+  "title": "Update 1.3: Atlas Rises - Coming Soon",
+  "type": "patch"
+ },
+ {
+  "ts": 1490615933,
+  "date": "2017-03-27",
+  "title": "Path Finder Patch 1.24",
+  "type": "patch"
+ },
+ {
+  "ts": 1489762894,
+  "date": "2017-03-17",
+  "title": "Path Finder - Patch 1.23",
+  "type": "patch"
+ },
+ {
+  "ts": 1489423982,
+  "date": "2017-03-13",
+  "title": "Path Finder - Patch 1.22",
+  "type": "patch"
+ },
+ {
+  "ts": 1488997339,
+  "date": "2017-03-08",
+  "title": "Introducing The Path Finder Update",
+  "type": "patch"
+ },
+ {
+  "ts": 1488906141,
+  "date": "2017-03-07",
+  "title": "Path Finder Update Coming Soon...",
+  "type": "patch"
+ },
+ {
+  "ts": 1481544010,
+  "date": "2016-12-12",
+  "title": "Patch 1.13",
+  "type": "patch"
+ },
+ {
+  "ts": 1481108075,
+  "date": "2016-12-07",
+  "title": "Patch 1.12",
+  "type": "patch"
+ },
+ {
+  "ts": 1480254227,
+  "date": "2016-11-27",
+  "title": "The Foundation Update is here",
+  "type": "patch"
+ },
+ {
+  "ts": 1480093054,
+  "date": "2016-11-25",
+  "title": "Foundation Update Incoming",
+  "type": "patch"
+ },
+ {
+  "ts": 1472837114,
+  "date": "2016-09-02",
+  "title": "Patch Notes 1.07",
+  "type": "patch"
+ },
+ {
+  "ts": 1471703280,
+  "date": "2016-08-20",
+  "title": "Patch Notes",
+  "type": "patch"
+ },
+ {
+  "ts": 1471116874,
+  "date": "2016-08-13",
+  "title": "Support Update",
+  "type": "patch"
+ },
+ {
+  "ts": 1471049380,
+  "date": "2016-08-13",
+  "title": "No Man's Sky Support",
+  "type": "announcement"
+ },
+ {
+  "ts": 1470960000,
+  "date": "2016-08-12",
+  "title": "Launch",
+  "type": "launch"
+ },
+ {
+  "ts": 1470589361,
+  "date": "2016-08-07",
+  "title": "No Man’s Sky Launches Worldwide August 12th",
+  "type": "announcement"
+ }
+]
