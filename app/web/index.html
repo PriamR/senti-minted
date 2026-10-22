@@ -29,7 +29,8 @@
   th { color:var(--muted); font-weight:500; }
   td.num { font-variant-numeric:tabular-nums; }
   .warn { color:var(--evon); } .up { color:var(--up); } .down { color:var(--down); }
-  .answer { margin-top:12px; }
+  .answer { margin-top:12px; } .answer p { margin:0 0 8px; } .answer ul { margin:0 0 8px; padding-left:20px; }
+  table.md { width:auto; margin:4px 0 10px; } table.md th, table.md td { padding:4px 12px 4px 0; }
   details { margin-top:8px; color:var(--muted); font-size:12px; } code { font-size:11.5px; }
   @media (max-width:600px) { body { padding:16px; } .hide-sm { display:none; } }
 </style>
@@ -64,6 +65,7 @@
     <div id="ask-out" aria-live="polite"></div>
   </section>
 </main>
+<script src="/static/md.js"></script>
 <script>
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const pct = v => (typeof v === 'number') ? Math.round(v * 100) + '%' : '—';
@@ -143,7 +145,7 @@ $('ask-form').addEventListener('submit', async e => {
                                          body: JSON.stringify({question: q})});
     const trace = d.provenance.map(p => `<li><code>${esc(p.tool)}(${esc(JSON.stringify(p.args))})</code></li>`).join('');
     const cost = d.usage ? ` · $${d.usage.cost_usd.toFixed(4)}` : '';
-    $('ask-out').innerHTML = `<div class="answer">${esc(d.answer).replace(/\n/g, '<br>')}</div>
+    $('ask-out').innerHTML = `<div class="answer">${md(d.answer)}</div>
       <details><summary>${d.provenance.length} tool call(s)${cost}</summary><ul>${trace}</ul></details>`;
   } catch (err) { $('ask-out').innerHTML = `<p class="warn">${esc(err.message)}</p>`; }
 });

@@ -211,6 +211,7 @@ _ASK = """
   </form>
   <div id="ask-out" aria-live="polite"></div>
 </section>
+<script src="/static/md.js"></script>
 <script>
 const NAME = __NAME__;
 document.getElementById('ask-form').addEventListener('submit', async (e) => {
@@ -228,7 +229,7 @@ document.getElementById('ask-form').addEventListener('submit', async (e) => {
     const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
     const trace = d.provenance.map(p => `<li><code>${esc(p.tool)}(${esc(JSON.stringify(p.args))})</code></li>`).join('');
     const cost = d.usage ? ` · $${d.usage.cost_usd.toFixed(4)}` : '';
-    out.innerHTML = `<div class="answer">${esc(d.answer).replace(/\\n/g, '<br>')}</div>
+    out.innerHTML = `<div class="answer">${md(d.answer)}</div>
       <details><summary>${d.provenance.length} tool call(s)${cost}</summary><ul>${trace}</ul></details>`;
   } catch (err) {
     out.innerHTML = `<p class="warn">Error: ${String(err.message || err)}</p>`;
@@ -258,7 +259,8 @@ _CSS = """
   .legend { display:flex; flex-wrap:wrap; gap:14px; color:var(--muted); font-size:12px; margin:8px 2px 0; }
   .legend i { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:5px; vertical-align:-1px; }
   .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); gap:12px; margin-top:18px; }
-  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px 14px; scroll-margin-top:12px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px 14px; scroll-margin-top:12px;
+          min-width:0; overflow-wrap:anywhere; }
   .card:target { border-color:var(--evon); }
   .card-head { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
   .ev-title { font-weight:600; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -292,11 +294,16 @@ _CSS = """
   .ask form { display:flex; gap:8px; }
   .ask input { flex:1; background:#0f1117; color:var(--text); border:1px solid var(--line); border-radius:8px; padding:9px 10px; font:inherit; }
   .ask button, .btn { background:var(--curve); color:#0b0d12; border:0; border-radius:8px; padding:9px 16px; font-weight:600; cursor:pointer; }
-  .answer { margin-top:10px; white-space:normal; }
+  .answer { margin-top:10px; white-space:normal; max-width:900px; } .answer p { margin:0 0 8px; }
+  .answer ul { margin:0 0 8px; padding-left:20px; }
+  table.md { border-collapse:collapse; margin:4px 0 10px; font-size:13px; }
+  table.md th, table.md td { border-bottom:1px solid var(--line); padding:4px 10px 4px 0; text-align:left; }
+  table.md th { color:var(--muted); font-weight:500; }
   details { margin-top:8px; color:var(--muted); font-size:12px; } code { font-size:11.5px; }
   .topbar { display:flex; justify-content:space-between; align-items:baseline; gap:12px; flex-wrap:wrap; }
   .meta { color:var(--muted); font-size:12px; margin-top:14px; }
-  @media (max-width:600px) { body { padding:16px; } .cards { grid-template-columns:1fr; } .arow { grid-template-columns:96px 1fr 58px; } }
+  @media (max-width:600px) { body { padding:16px; } .cards { grid-template-columns:minmax(0, 1fr); }
+    .arow { grid-template-columns:96px 1fr 58px; } .ask form { flex-wrap:wrap; } }
 """
 
 

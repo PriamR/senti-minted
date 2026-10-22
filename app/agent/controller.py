@@ -111,7 +111,7 @@ async def _loop(client: Any, model: str, question: str, ledger: UsageLedger, *, 
             try:
                 result = await tools.dispatch(name, args)
             except Exception as e:  # noqa: BLE001 — surface tool errors to the model
-                result = {"error": f"{type(e).__name__}: {str(e)[:200]}"}
+                result = {"error": deepseek.scrub(f"{type(e).__name__}: {str(e)[:200]}")}
             provenance.append({"step": step, "tool": name, "args": args, "result": result})
             if verbose:
                 print(f"  → {name}({args}) → {json.dumps(result)[:180]}")

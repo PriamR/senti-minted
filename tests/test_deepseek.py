@@ -57,3 +57,11 @@ def test_ledger_excludes_cached_calls_from_cost():
 def test_tiers():
     assert tier("fast") == ("deepseek-flash", False)
     assert tier("pro") == ("deepseek-v4-pro", True)
+
+
+def test_scrub_removes_echoed_key_fragments():
+    from app.clients.deepseek import scrub
+    msg = "Authentication Fails, Your api key: ****abcd is invalid; also sk-live_12345abc"
+    out = scrub(msg)
+    assert "abcd" not in out and "sk-live" not in out
+    assert scrub("DEEPSEEK_API_KEY not set") == "DEEPSEEK_API_KEY not set"

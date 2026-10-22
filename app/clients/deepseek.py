@@ -44,6 +44,14 @@ class LLMError(RuntimeError):
     """The LLM call failed or returned something unusable."""
 
 
+_KEY_ECHO = re.compile(r"\*{2,}\w*|\bsk-[A-Za-z0-9_-]+")
+
+
+def scrub(message: str) -> str:
+    """Provider errors can echo part of the key ("Your api key: ****abcd"); never keep it."""
+    return _KEY_ECHO.sub("[redacted]", message)
+
+
 # ── prices ──────────────────────────────────────────────────────────────────
 # USD per 1M tokens at PEAK rates, from https://api-docs.deepseek.com/quick_start/pricing
 # as published on 22 Oct 2026. Off-peak is half. Peak = 01:00-04:00 and 06:00-10:00
@@ -180,7 +188,7 @@ async def chat_json(
             try:
                 resp = await client().chat.completions.create(**kwargs)
             except Exception as e:  # noqa: BLE001 — auth, network, rate limit: all degrade the same way
-                raise LLMError(f"{type(e).__name__}: {str(e)[:200]}") from e
+                raise LLMError(scrub(f"{type(e).__name__}: {str(e)[:200]}")) from e
             latency = time.perf_counter() - t0
             u = resp.usage.model_dump() if resp.usage else {}
             details = u.get("completion_tokens_details") or {}

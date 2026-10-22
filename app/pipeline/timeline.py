@@ -197,7 +197,7 @@ async def measure_movement(appid: int, groups: list[dict[str, Any]], *, min_z: f
     window_end]. The burst interior is excluded from both halves. Counts are by
     creation date with each review's current vote (see sampling.py on edits).
     """
-    now = _now_ts()
+    now = _now_ts() // 3600 * 3600  # hour-rounded so an open window's query stays cacheable
 
     async def one(g: dict[str, Any]) -> None:
         w = g["window"]
@@ -377,7 +377,7 @@ async def build_timeline(
         "name": name or str(appid),
         "generated_at": datetime.now(tz=timezone.utc).isoformat(),
         "measure": measure.name,
-        "method": measure.method,
+        "method": measure.method if chosen else "curve_only",
         "used_llm": use_llm,
         "degraded": any(g["analysis"].get("degraded") for g in analyzed),
         "window": {

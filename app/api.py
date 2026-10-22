@@ -153,7 +153,7 @@ async def api_start_job(
                               "cost_usd": t["llm_usage"]["cost_usd"]}
         except Exception as e:  # noqa: BLE001 — report any failure to the poller
             job["status"] = "error"
-            job["error"] = f"{type(e).__name__}: {str(e)[:300]}"
+            job["error"] = deepseek.scrub(f"{type(e).__name__}: {str(e)[:300]}")
 
     job["_task"] = asyncio.create_task(run())  # keep a reference so it isn't collected
     return {"job_id": job_id, "already_running": False}
@@ -174,12 +174,17 @@ async def api_ask(body: AskBody) -> dict[str, Any]:
     try:
         return await run_agent(body.question)
     except Exception as e:  # noqa: BLE001 — upstream LLM failure
-        raise HTTPException(502, f"agent failed: {type(e).__name__}: {str(e)[:200]}") from e
+        raise HTTPException(502, deepseek.scrub(f"agent failed: {type(e).__name__}: {str(e)[:200]}")) from e
 
 
 @app.get("/", response_class=HTMLResponse)
 async def index() -> FileResponse:
     return FileResponse(WEB_DIR / "index.html", media_type="text/html")
+
+
+@app.get("/static/md.js")
+async def md_js() -> FileResponse:
+    return FileResponse(WEB_DIR / "md.js", media_type="text/javascript")
 
 
 @app.get("/view/{appid}", response_class=HTMLResponse)
