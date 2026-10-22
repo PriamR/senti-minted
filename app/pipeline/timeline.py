@@ -1,32 +1,48 @@
 """Build a product's retrospective sentiment timeline.
 
-Two layers (see PLANNING.md):
+Three layers (see PLANNING.md and TECHNICAL_BREAKDOWN.md):
   1. Baseline curve  — Steam's review histogram, full history, free.
-  2. Event windows   — Steam-News events are chained into rolling groups, each
-                       analyzed over an asymmetric window (1 week before the
-                       burst, 3 weeks after the last event in it). Sampled review
-                       text is scored by the approval Measure (LLM), giving each
-                       group a before/after delta + drivers.
+  2. Movement        — official Steam announcements are chained into rolling event
+                       groups, each with an asymmetric window (1 week before the
+                       burst, 3 weeks after its last event). Every group gets exact
+                       before/after approval from Steam's date-range counts, with a
+                       two-proportion z-score. Free.
+  3. Analysis        — the LLM is spent only where it matters: the launch group plus
+                       the groups where approval moved most (or the most recent K).
+                       Each selected window gets a stratified review sample scored
+                       by the approval Measure: aspects, divisiveness, drivers.
 """
 from __future__ import annotations
 
+import asyncio
+import math
 from collections import Counter
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable
 
 from ..clients import steam
+from ..clients.deepseek import UsageLedger
+from .. import cache
 from ..measures import Measure
 from ..measures.approval import ApprovalMeasure
+from .sampling import sample_window
 
 DAY = 86400
 PATCH_KEYWORDS = (
     "update", "patch", "fix", "hotfix", "changelog",
     "version", "build", "maintenance", "expedition", "release",
 )
+SELECT_STRATEGIES = ("movers", "recent", "all")
+
+Progress = Callable[[str], None]
 
 
 def _iso(ts: int) -> str:
     return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
+
+
+def _noop(_: str) -> None:
+    pass
 
 
 async def build_baseline(appid: int) -> dict[str, Any]:
@@ -53,24 +69,35 @@ async def build_baseline(appid: int) -> dict[str, Any]:
     }
 
 
-async def get_events(appid: int, *, launch_ts: int | None, count: int = 50) -> list[dict[str, Any]]:
-    """Steam-News items (+ a synthetic Launch), newest first."""
-    items = await steam.get_news(appid, count=count)
+async def get_events(appid: int, *, launch_ts: int | None, count: int = 1000) -> list[dict[str, Any]]:
+    """The developer's own Steam announcements (+ a synthetic Launch), newest first.
+
+    Press coverage is excluded at the source (official feed only); cross-posted
+    duplicates (same day, same title) are collapsed.
+    """
+    items = await steam.get_news(appid, count=count, feeds=steam.OFFICIAL_FEED)
     events: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
     for it in items:
-        title = it.get("title", "")
+        title = (it.get("title") or "").strip()
+        ts = it.get("date", 0)
+        key = (_iso(ts), title.lower())
+        if key in seen:
+            continue
+        seen.add(key)
         is_patch = any(kw in title.lower() for kw in PATCH_KEYWORDS)
         events.append({
-            "ts": it.get("date", 0),
-            "date": _iso(it.get("date", 0)),
+            "ts": ts,
+            "date": _iso(ts),
             "title": title,
             "url": it.get("url", ""),
             "type": "patch" if is_patch else "announcement",
+            "blurb": it.get("contents", ""),
         })
     if launch_ts:
         events.append({
             "ts": launch_ts, "date": _iso(launch_ts),
-            "title": "Launch", "url": "", "type": "launch",
+            "title": "Launch", "url": "", "type": "launch", "blurb": "",
         })
     events.sort(key=lambda e: e["ts"], reverse=True)
     return events
@@ -136,8 +163,10 @@ def group_events(
             "peak_day_count": peak_day_count,
             "first_ts": first_ts,
             "last_ts": last_ts,
+            "blurb": anchor.get("blurb", ""),
             "members": [
-                {"date": m["date"], "title": m["title"], "type": m["type"]} for m in members
+                {"date": m["date"], "title": m["title"], "type": m["type"], "url": m.get("url", "")}
+                for m in members
             ],
             "window": {
                 "start_ts": win_start, "end_ts": win_end,
@@ -150,117 +179,122 @@ def group_events(
     return groups
 
 
-def _ratio(reviews: list[dict[str, Any]]) -> float | None:
-    if not reviews:
+def two_proportion_z(up_b: int, n_b: int, up_a: int, n_a: int) -> float | None:
+    """z for the change in approval between two independent groups of reviews."""
+    if n_b == 0 or n_a == 0:
         return None
-    return sum(1 for r in reviews if r.get("voted_up")) / len(reviews)
+    p = (up_b + up_a) / (n_b + n_a)
+    se = math.sqrt(p * (1 - p) * (1 / n_b + 1 / n_a))
+    if se == 0:
+        return None
+    return round((up_a / n_a - up_b / n_b) / se, 2)
 
 
-async def analyze_events(
-    appid: int,
+async def measure_movement(appid: int, groups: list[dict[str, Any]], *, min_z: float = 2.0) -> None:
+    """Exact before/after approval for every group, in place (two cheap requests each).
+
+    Before = reviews created in [window_start, first_event); after = (last_event,
+    window_end]. The burst interior is excluded from both halves. Counts are by
+    creation date with each review's current vote (see sampling.py on edits).
+    """
+    now = _now_ts()
+
+    async def one(g: dict[str, Any]) -> None:
+        w = g["window"]
+        before, after = await asyncio.gather(
+            steam.get_window_summary(appid, w["start_ts"], g["first_ts"] - 1),
+            steam.get_window_summary(appid, g["last_ts"] + 1, min(w["end_ts"], now)),
+        )
+        z = two_proportion_z(before["up"], before["n"], after["up"], after["n"])
+        delta = None
+        if before["approval"] is not None and after["approval"] is not None:
+            delta = round(after["approval"] - before["approval"], 4)
+        g["movement"] = {
+            "n_before": before["n"], "n_after": after["n"],
+            "approval_before": round(before["approval"], 4) if before["approval"] is not None else None,
+            "approval_after": round(after["approval"], 4) if after["approval"] is not None else None,
+            "delta": delta,
+            "z": z,
+            "significant": z is not None and abs(z) >= min_z,
+        }
+
+    await asyncio.gather(*(one(g) for g in groups))
+
+
+def select_windows(
     groups: list[dict[str, Any]],
     *,
-    measure: Measure,
-    max_events: int = 6,
-    max_pages: int = 60,
-    min_reviews: int = 5,
-) -> dict[str, Any]:
-    """Walk reviews backward once, score each recent event group's window.
+    k: int = 6,
+    strategy: str = "movers",
+    min_n: int = 30,
+    min_z: float = 2.0,
+) -> list[dict[str, Any]]:
+    """Choose which groups get the paid LLM read, recording why on each.
 
-    `max_events` here counts event *groups*. Delta compares the week before the
-    burst (window_start .. first_event) against the tail after it
-    (last_event .. window_end); the burst interior feeds the LLM but not the
-    delta halves.
+    movers: the launch group, then the groups with the largest |delta| among those
+            with >= min_n reviews on both sides and |z| >= min_z.
+    recent: the K newest groups (the original behaviour).
+    all:    every group.
     """
-    target = groups[:max_events] if max_events else groups
-    until_ts = min((g["window"]["start_ts"] for g in target), default=None)
-
-    walked: list[dict[str, Any]] = []
-    async for rev in steam.iter_reviews(appid, max_pages=max_pages, until_ts=until_ts):
-        walked.append(rev)
-
-    coverage = {
-        "reviews_walked": len(walked),
-        "oldest_review_ts": min((r["timestamp"] for r in walked), default=None),
-        "newest_review_ts": max((r["timestamp"] for r in walked), default=None),
-    }
-    oldest = coverage["oldest_review_ts"]
-    now = _now_ts()
-    analyzed = 0
-
-    for g in groups:  # newest first
-        g["analysis"] = None
-        if analyzed >= max_events or oldest is None:
-            continue
-        w = g["window"]
-        if w["end_ts"] < oldest:  # whole window predates what we crawled
-            continue
-        window_reviews = [r for r in walked if w["start_ts"] <= r["timestamp"] <= w["end_ts"]]
-        if len(window_reviews) < min_reviews:
-            continue
-
-        before = [r for r in window_reviews if r["timestamp"] < g["first_ts"]]
-        after = [r for r in window_reviews if r["timestamp"] > g["last_ts"]]
-        b, a = _ratio(before), _ratio(after)
-        scored = await measure.compute(window_reviews)
-        after_observed = max(0, min(w["end_ts"], now) - g["last_ts"]) / DAY
-        g["analysis"] = {
-            **scored,
-            "approval_steam_before": b,
-            "approval_steam_after": a,
-            "n_before": len(before),
-            "n_after": len(after),
-            "delta": (a - b) if (a is not None and b is not None) else None,
-            "after_days_observed": round(after_observed, 1),
-            "window_truncated": w["truncated"],
-        }
-        analyzed += 1
-
-    return {"events": groups, "coverage": coverage, "events_analyzed": analyzed}
+    for g in groups:
+        g["selected"], g["selection_reason"] = False, None
+    if strategy == "all":
+        chosen = list(groups)
+        for g in chosen:
+            g["selection_reason"] = "all"
+    elif strategy == "recent":
+        chosen = groups[:k]
+        for g in chosen:
+            g["selection_reason"] = "recent"
+    elif strategy == "movers":
+        chosen = []
+        launch = next((g for g in groups if g["type"] == "launch"), None)
+        if launch is not None and k > 0:
+            launch["selection_reason"] = "launch"
+            chosen.append(launch)
+        pool = [
+            g for g in groups
+            if g is not launch and (m := g.get("movement")) and m["delta"] is not None
+            and m["n_before"] >= min_n and m["n_after"] >= min_n and m["significant"]
+        ]
+        pool.sort(key=lambda g: abs(g["movement"]["delta"]), reverse=True)
+        for g in pool[:max(0, k - len(chosen))]:
+            m = g["movement"]
+            g["selection_reason"] = f"moved {m['delta'] * 100:+.1f} pts (z={m['z']})"
+            chosen.append(g)
+    else:
+        raise ValueError(f"unknown selection strategy {strategy!r}; use one of {SELECT_STRATEGIES}")
+    for g in chosen:
+        g["selected"] = True
+    return chosen
 
 
-async def analyze_explicit_window(
+async def analyze_window(
     appid: int,
     start_ts: int,
     end_ts: int,
     *,
     measure: Measure,
-    max_pages: int = 30,
+    context: dict[str, Any],
+    sample_reviews: int = 200,
+    language: str = "english",
     min_reviews: int = 5,
-) -> dict[str, Any]:
-    """Run the measure over an arbitrary [start, end] window of reviews.
-
-    Used by the agent's `analyze_window` tool. Crawls `filter=recent` back to
-    `start_ts` (capped by `max_pages`). If the window predates what the cap can
-    reach, returns `available: False` rather than attempting a full-history crawl
-    — deep history needs the cacheable backfill job (PROJECT_OVERVIEW §9).
-    """
-    walked: list[dict[str, Any]] = []
-    async for rev in steam.iter_reviews(appid, max_pages=max_pages, until_ts=start_ts):
-        walked.append(rev)
-    oldest = min((r["timestamp"] for r in walked), default=None)
-    if oldest is None:
-        return {"available": False, "reason": "no reviews returned"}
-    if end_ts < oldest:
-        return {
-            "available": False,
-            "reason": "window predates the reachable crawl; needs historical backfill",
-            "reached_back_to": _iso(oldest),
-        }
-    window_reviews = [r for r in walked if start_ts <= r["timestamp"] <= end_ts]
-    if len(window_reviews) < min_reviews:
-        return {
-            "available": False,
-            "reason": f"only {len(window_reviews)} reviews in window",
-            "reached_back_to": _iso(oldest),
-        }
-    scored = await measure.compute(window_reviews)
+) -> tuple[dict[str, Any] | None, list[dict[str, Any]], str | None]:
+    """Sample a window and score it. Returns (analysis, llm_calls, reason_if_none)."""
+    population, sample = await asyncio.gather(
+        steam.get_window_summary(appid, start_ts, min(end_ts, _now_ts())),
+        sample_window(appid, start_ts, end_ts, n=sample_reviews, language=language),
+    )
+    if len(sample["reviews"]) < min_reviews:
+        return None, [], f"only {len(sample['reviews'])} eligible reviews in window"
+    scored = await measure.compute(sample["reviews"], context)
+    calls = scored.pop("_calls", [])
     return {
-        "available": True,
-        "approval_steam": _ratio(window_reviews),
         **scored,
-        "window": {"start": _iso(start_ts), "end": _iso(end_ts)},
-    }
+        "approval_population": round(population["approval"], 4) if population["approval"] is not None else None,
+        "n_population": population["n"],
+        "sample": sample["stats"],
+    }, calls, None
 
 
 async def build_timeline(
@@ -268,34 +302,93 @@ async def build_timeline(
     *,
     name: str | None = None,
     use_llm: bool = True,
+    single_model: bool = False,
     before_days: int = 7,
     after_days: int = 21,
     chain_gap_days: int = 7,
     max_events: int = 6,
-    max_pages: int = 60,
+    select: str = "movers",
+    sample_reviews: int = 200,
+    language: str = "english",
+    window_concurrency: int = 2,
+    progress: Progress | None = None,
 ) -> dict[str, Any]:
+    say = progress or _noop
+    cache.reset_stats()
+    say("Fetching the full review history...")
     baseline = await build_baseline(appid)
+    say("Fetching official announcements...")
     events = await get_events(appid, launch_ts=baseline.get("start_ts"))
     groups = group_events(
         events, chain_gap_days=chain_gap_days,
         before_days=before_days, after_days=after_days,
     )
-    measure = ApprovalMeasure(use_llm=use_llm)
-    analysis = await analyze_events(
-        appid, groups, measure=measure, max_events=max_events, max_pages=max_pages,
-    )
+    say(f"Measuring before/after approval for {len(groups)} event groups...")
+    await measure_movement(appid, groups)
+    chosen = select_windows(groups, k=max_events, strategy=select)
+
+    measure = ApprovalMeasure(use_llm=use_llm, single_model=single_model)
+    ledger = UsageLedger()
+    sem = asyncio.Semaphore(window_concurrency)
+    now = _now_ts()
+    done = 0
+    for g in groups:
+        g["analysis"] = None
+
+    async def run(g: dict[str, Any]) -> None:
+        nonlocal done
+        w = g["window"]
+        context = {
+            "game": name or str(appid),
+            "start": w["start_date"], "end": w["end_date"],
+            "events": [f'{m["date"]}: {m["title"]}' for m in g["members"]][:12],
+            "event_blurb": g.get("blurb", "")[:400],
+            "movement": g.get("movement"),
+        }
+        async with sem:
+            analysis, calls, reason = await analyze_window(
+                appid, w["start_ts"], w["end_ts"], measure=measure, context=context,
+                sample_reviews=sample_reviews, language=language,
+            )
+        ledger.calls.extend(calls)
+        done += 1
+        say(f"Analyzed {done}/{len(chosen)}: {g['date']} {g['title'][:50]}")
+        if analysis is None:
+            g["analysis_skipped"] = reason
+            return
+        m = g.get("movement") or {}
+        g["analysis"] = {
+            **analysis,
+            "approval_steam_before": m.get("approval_before"),
+            "approval_steam_after": m.get("approval_after"),
+            "n_before": m.get("n_before"),
+            "n_after": m.get("n_after"),
+            "delta": m.get("delta"),
+            "after_days_observed": round(max(0, min(w["end_ts"], now) - g["last_ts"]) / DAY, 1),
+            "window_truncated": w["truncated"],
+        }
+
+    say(f"Sampling and scoring {len(chosen)} window(s)...")
+    await asyncio.gather(*(run(g) for g in chosen))
+
+    analyzed = [g for g in groups if g.get("analysis")]
     return {
         "appid": appid,
         "name": name or str(appid),
         "generated_at": datetime.now(tz=timezone.utc).isoformat(),
         "measure": measure.name,
+        "method": measure.method,
         "used_llm": use_llm,
+        "degraded": any(g["analysis"].get("degraded") for g in analyzed),
         "window": {
             "before_days": before_days, "after_days": after_days,
             "chain_gap_days": chain_gap_days,
         },
+        "selection": {"strategy": select, "k": max_events, "min_n": 30, "min_z": 2.0},
+        "sampling": {"per_window": sample_reviews, "language": language},
         "baseline": baseline,
-        "events": analysis["events"],
-        "coverage": analysis["coverage"],
-        "events_analyzed": analysis["events_analyzed"],
+        "events": groups,
+        "events_analyzed": len(analyzed),
+        "llm_usage": ledger.summary(),
+        "cache": cache.stats(),
     }

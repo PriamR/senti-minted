@@ -8,9 +8,11 @@ as JSON-schema functions; `dispatch` runs them by name.
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta, timezone
+from contextvars import ContextVar
+from datetime import datetime, timezone
 from typing import Any
 
+from ..clients.deepseek import UsageLedger
 from ..measures.approval import ApprovalMeasure
 from ..pipeline import timeline
 from ..resolver import resolve_product as _resolve_product
@@ -21,8 +23,15 @@ _NUM_WORDS = {
     "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
 }
 
-# How recent a window must be for analyze_window to attempt a live crawl.
-RECENT_REACHABLE_DAYS = 120
+# Longest window analyze_window will sample (the sampler stratifies by day-slices).
+MAX_WINDOW_DAYS = 366
+# Reviews sampled per analyze_window call: enough for aspect shares, fast enough for a chat.
+AGENT_SAMPLE_REVIEWS = 120
+
+# LLM spend inside tools (analyze_window) goes to the current question's ledger,
+# which the controller sets per run (a context variable, so concurrent API
+# requests don't mix their costs).
+current_ledger: ContextVar[UsageLedger | None] = ContextVar("current_ledger", default=None)
 
 
 def _now() -> int:
@@ -72,8 +81,7 @@ def resolve_timeframe(launch_date: str, phrase: str) -> dict[str, Any]:
     if launch is None:
         return {"error": "launch_date required for this phrase"}
 
-    if re.search(r"\b(at launch|launch|release|day one|debut)\b", p):
-        return span(launch, launch + 45 * DAY, "launch window (first ~6 weeks)")
+    # Specific spans first: "2 years after launch" contains "launch" but isn't the launch window.
     m = re.search(r"first (\w+) (month|year)s?", p)
     if m and _num(m.group(1)):
         units = _num(m.group(1)) * (365 if m.group(2) == "year" else 30)
@@ -86,6 +94,8 @@ def resolve_timeframe(launch_date: str, phrase: str) -> dict[str, Any]:
         anniv = launch + units * DAY
         # anniversary window, widened forward to catch a proximate major event
         return span(anniv - 15 * DAY, anniv + 45 * DAY, f"~{n} {m.group(2)}(s) after launch")
+    if re.search(r"\b(at launch|launch|release|day one|debut)\b", p):
+        return span(launch, launch + 45 * DAY, "launch window (first ~6 weeks)")
 
     return {"error": f"could not parse timeframe '{phrase}'"}
 
@@ -134,18 +144,45 @@ async def get_events(appid: int, start: str | None = None, end: str | None = Non
 
 
 async def analyze_window(appid: int, start: str, end: str) -> dict[str, Any]:
-    """The expensive tool: LLM drivers + divisiveness for a window. Gated to
-    recent (reachable) windows; older windows need the historical backfill."""
-    end_ts = _ts(end)
-    if end_ts < _now() - RECENT_REACHABLE_DAYS * DAY:
-        return {
-            "available": False,
-            "reason": (f"window ends {end} — older than ~{RECENT_REACHABLE_DAYS}d, so review text "
-                       "isn't reachable without the historical backfill. Use approval-curve numbers."),
-        }
-    return await timeline.analyze_explicit_window(
-        appid, _ts(start), end_ts, measure=ApprovalMeasure(use_llm=True)
+    """The expensive tool: aspect sentiment, drivers and divisiveness for any window
+    back to launch (Steam's date-range query reaches it directly)."""
+    start_ts, end_ts = _ts(start), _ts(end) + DAY - 1
+    if end_ts < start_ts:
+        return {"available": False, "reason": "end is before start"}
+    if (end_ts - start_ts) / DAY > MAX_WINDOW_DAYS:
+        return {"available": False, "reason": f"window longer than {MAX_WINDOW_DAYS} days; narrow it"}
+    analysis, calls, reason = await timeline.analyze_window(
+        appid, start_ts, end_ts, measure=ApprovalMeasure(use_llm=True),
+        context={"game": str(appid), "start": start, "end": end, "events": []},
+        sample_reviews=AGENT_SAMPLE_REVIEWS,
     )
+    ledger = current_ledger.get()
+    if ledger is not None:
+        ledger.calls.extend(calls)
+    if analysis is None:
+        return {"available": False, "reason": reason}
+    # Compact view for the model: the numbers it may quote, nothing else.
+    return {
+        "available": True,
+        "window": {"start": start, "end": end},
+        "approval_population": analysis["approval_population"],
+        "n_population": analysis["n_population"],
+        "approval_text": analysis["approval_text"],
+        "divisiveness": analysis["divisiveness"],
+        "vote_text_mismatch": analysis["vote_text_mismatch"],
+        "n_sampled": analysis["n_reviews"],
+        "edited_later_share": analysis["sample"]["edited_later_share"],
+        "top_aspects": [
+            {k: a[k] for k in ("aspect", "mentions", "positive_share", "impact")}
+            for a in analysis["aspects"][:6]
+        ],
+        "drivers": [
+            {k: d[k] for k in ("aspect", "direction", "weight", "why")} for d in analysis["drivers"]
+        ],
+        "summary": analysis["summary"],
+        "method": analysis["method"],
+        "degraded": analysis["degraded"],
+    }
 
 
 # ── schemas + dispatch ──────────────────────────────────────────────────────
@@ -181,7 +218,7 @@ TOOLS: list[dict[str, Any]] = [
             "required": ["appid"]}}},
     {"type": "function", "function": {
         "name": "analyze_window",
-        "description": "EXPENSIVE. LLM read of review TEXT for a window: drivers (why sentiment moved) + divisiveness. Only call when the user needs the WHY. Works only for recent windows; returns available:false for old ones.",
+        "description": "EXPENSIVE. LLM read of a stratified sample of review TEXT for any window since launch: per-aspect sentiment, drivers (why sentiment moved) and divisiveness. Only call when the user needs the WHY. Windows up to 366 days.",
         "parameters": {"type": "object", "properties": {
             "appid": {"type": "integer"},
             "start": {"type": "string", "description": "ISO date"},

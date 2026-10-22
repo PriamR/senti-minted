@@ -39,6 +39,14 @@ async def _igdb_id_for_appid(appid: int) -> int | None:
     return None
 
 
+async def _igdb_name(igdb_id: int) -> str | None:
+    try:
+        rows = await igdb._query("games", f"fields name; where id = {int(igdb_id)}; limit 1;")
+        return rows[0].get("name") if rows else None
+    except Exception:  # noqa: BLE001 — best-effort enrichment only
+        return None
+
+
 async def resolve_product(query: str) -> dict[str, Any]:
     """Resolve a free-text name (or appid) to a canonical product record."""
     key = query.strip().lower()
@@ -73,6 +81,8 @@ async def resolve_product(query: str) -> dict[str, Any]:
         hist = await steam.get_review_histogram(appid)
         record["launch_date"] = _iso(hist.get("start_date"))
         record["igdb_id"] = await _igdb_id_for_appid(appid)
+        if key.isdigit() and record["igdb_id"]:
+            record["canonical_name"] = await _igdb_name(record["igdb_id"]) or canonical_name
 
     _cache[key] = record
     return record
