@@ -8,6 +8,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
+from .. import cache
 from .base import make_client
 from ..config import settings
 
@@ -38,6 +39,7 @@ async def _get_token() -> str:
     return _token
 
 
+@cache.cached_call("igdb")
 async def _query(endpoint: str, body: str) -> list[dict[str, Any]]:
     token = await _get_token()
     async with make_client() as client:

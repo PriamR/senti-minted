@@ -24,11 +24,23 @@ def _get(name: str) -> str:
 
 @dataclass(frozen=True)
 class Settings:
-    # LLM
+    # LLM. Two tiers (checked against api-docs.deepseek.com, 22 Oct 2026). The legacy
+    # names deepseek-chat / deepseek-reasoner are now both served by deepseek-flash
+    # (non-thinking / thinking), so they are no longer two different models.
     deepseek_api_key: str = field(default_factory=lambda: _get("DEEPSEEK_API_KEY"))
     deepseek_base_url: str = "https://api.deepseek.com"
-    deepseek_chat_model: str = "deepseek-chat"          # cheap: classification
-    deepseek_reasoner_model: str = "deepseek-reasoner"  # capable: synthesis
+    deepseek_fast_model: str = field(
+        default_factory=lambda: _get("DEEPSEEK_FAST_MODEL") or "deepseek-flash"
+    )  # cheap: per-review classification + the agent loop, thinking off
+    deepseek_pro_model: str = field(
+        default_factory=lambda: _get("DEEPSEEK_PRO_MODEL") or "deepseek-v4-pro"
+    )  # capable: per-window synthesis, thinking on
+
+    # Cache (SQLite, per-source TTLs; see app/cache.py). SENTI_CACHE=0 disables it.
+    cache_path: Path = field(
+        default_factory=lambda: Path(_get("SENTI_CACHE_PATH") or PROJECT_ROOT / ".cache" / "senti.sqlite")
+    )
+    cache_enabled: bool = field(default_factory=lambda: _get("SENTI_CACHE") != "0")
 
     # Twitch / IGDB
     twitch_client_id: str = field(default_factory=lambda: _get("TWITCH_CLIENT_ID"))

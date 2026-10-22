@@ -10,12 +10,14 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from .. import cache
 from .base import make_client
 from ..config import settings
 
 BASE = "https://api.isthereanydeal.com"
 
 
+@cache.cached_call("itad")
 async def lookup(*, title: str | None = None, appid: int | None = None) -> str | None:
     """Resolve a game to ITAD's internal UUID by title or Steam appid."""
     params: dict[str, Any] = {"key": settings.itad_api_key}
@@ -35,6 +37,7 @@ async def lookup(*, title: str | None = None, appid: int | None = None) -> str |
     return None
 
 
+@cache.cached_call("itad")
 async def overview(ids: list[str], *, country: str = "US") -> dict[str, dict[str, Any]]:
     """Current price + regular price + best shop, keyed by ITAD UUID."""
     if not ids:
