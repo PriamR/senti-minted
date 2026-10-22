@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Senti-Minted</title>
+<style>
+  :root { --bg:#0f1117; --panel:#171a23; --line:#2a2f3a; --text:#e6e8ee; --muted:#8b90a0;
+          --curve:#5b9dff; --up:#46c98b; --down:#ef6f6f; --evon:#f4b740; }
+  * { box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font:14px/1.5 system-ui,sans-serif; margin:0; padding:28px; }
+  main { max-width:880px; margin:0 auto; }
+  h1 { font-size:22px; margin:0 0 4px; } h2 { font-size:15px; margin:0 0 10px; }
+  .sub, .muted { color:var(--muted); }
+  a { color:var(--curve); }
+  section { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px; margin-top:16px; }
+  form { display:flex; gap:8px; flex-wrap:wrap; }
+  input[type=text] { flex:1; min-width:200px; background:var(--bg); color:var(--text); border:1px solid var(--line);
+                     border-radius:8px; padding:9px 10px; font:inherit; }
+  label.opt { display:flex; align-items:center; gap:6px; color:var(--muted); font-size:13px; }
+  button { background:var(--curve); color:#0b0d12; border:0; border-radius:8px; padding:9px 16px; font-weight:600; cursor:pointer; }
+  button.ghost { background:transparent; color:var(--curve); border:1px solid var(--line); }
+  button:disabled { opacity:.5; cursor:default; }
+  .status { margin-top:12px; }
+  .log { font:12px/1.6 ui-monospace,monospace; color:var(--muted); margin:8px 0 0; padding:0; list-style:none; }
+  .log li:last-child { color:var(--text); }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:7px 6px; border-bottom:1px solid var(--line); }
+  th { color:var(--muted); font-weight:500; }
+  td.num { font-variant-numeric:tabular-nums; }
+  .warn { color:var(--evon); } .up { color:var(--up); } .down { color:var(--down); }
+  .answer { margin-top:12px; }
+  details { margin-top:8px; color:var(--muted); font-size:12px; } code { font-size:11.5px; }
+  @media (max-width:600px) { body { padding:16px; } .hide-sm { display:none; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Senti-Minted</h1>
+  <p class="sub">How a game's reception moved across its whole life, which updates moved it, and why —
+    from Steam reviews. Type a game to build its sentiment journey.</p>
+
+  <section>
+    <h2>Build a journey</h2>
+    <form id="build-form">
+      <input id="q" type="text" placeholder="Game name or Steam appid, e.g. No Man's Sky" autocomplete="off" required>
+      <label class="opt"><input id="llm" type="checkbox" checked> LLM analysis</label>
+      <button id="go" type="submit">Build</button>
+    </form>
+    <div id="status" class="status" aria-live="polite"></div>
+  </section>
+
+  <section>
+    <h2>Saved journeys</h2>
+    <div id="saved"><p class="muted">Loading…</p></div>
+  </section>
+
+  <section>
+    <h2>Ask a question</h2>
+    <form id="ask-form">
+      <input id="ask-q" type="text" placeholder="e.g. What did No Man's Sky's reception look like 2 years in, and why?" autocomplete="off">
+      <button type="submit">Ask</button>
+    </form>
+    <div id="ask-out" aria-live="polite"></div>
+  </section>
+</main>
+<script>
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const pct = v => (typeof v === 'number') ? Math.round(v * 100) + '%' : '—';
+const $ = id => document.getElementById(id);
+
+async function getJSON(url, opts) {
+  const r = await fetch(url, opts);
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.detail || r.statusText);
+  return d;
+}
+
+async function loadSaved() {
+  try {
+    const rows = await getJSON('/api/timelines');
+    if (!rows.length) { $('saved').innerHTML = '<p class="muted">None yet — build one above.</p>'; return; }
+    $('saved').innerHTML = `<table><thead><tr><th>Game</th><th>Approval arc</th><th class="hide-sm">Windows read</th>
+      <th class="hide-sm">Method</th><th class="hide-sm">Built</th></tr></thead><tbody>${rows.map(r => `
+      <tr><td><a href="/view/${r.appid}">${esc(r.name)}</a></td>
+      <td class="num">${pct(r.approval_first)} → ${pct(r.approval_last)}</td>
+      <td class="num hide-sm">${r.events_analyzed}</td>
+      <td class="hide-sm">${esc(r.method)}${r.degraded ? ' <span class="warn">(degraded)</span>' : ''}</td>
+      <td class="hide-sm muted">${esc((r.generated_at || '').slice(0, 10))}</td></tr>`).join('')}</tbody></table>`;
+  } catch (e) { $('saved').innerHTML = `<p class="warn">${esc(e.message)}</p>`; }
+}
+
+async function poll(jobId, appid) {
+  while (true) {
+    const j = await getJSON(`/api/jobs/${jobId}`);
+    $('log').innerHTML = j.log.map(l => `<li>${esc(l)}</li>`).join('');
+    if (j.status === 'done') { location.href = `/view/${appid}`; return; }
+    if (j.status === 'error') throw new Error(j.error);
+    await new Promise(r => setTimeout(r, 1500));
+  }
+}
+
+async function build(appid, name, useLLM) {
+  const params = new URLSearchParams({name, no_llm: String(!useLLM)});
+  const {job_id} = await getJSON(`/api/timeline/${appid}/jobs?${params}`, {method: 'POST'});
+  $('status').insertAdjacentHTML('beforeend',
+    `<p class="muted">Building… ${useLLM ? 'Sampling ~200 reviews per window and reading them takes a few minutes.' : ''}</p><ul id="log" class="log"></ul>`);
+  await poll(job_id, appid);
+}
+
+$('build-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const q = $('q').value.trim(); if (!q) return;
+  $('go').disabled = true;
+  $('status').innerHTML = '<p class="muted">Resolving…</p>';
+  try {
+    const p = await getJSON(`/api/resolve?q=${encodeURIComponent(q)}`);
+    if (!p.resolved) throw new Error(`Couldn't find a Steam game for "${q}".`);
+    const conf = p.confidence < 0.9 ? ` <span class="warn">(low confidence ${p.confidence})</span>` : '';
+    $('status').innerHTML = `<p><b>${esc(p.canonical_name)}</b> · appid ${p.appid} · launched ${esc(p.launch_date || '?')}${conf}</p>`;
+    if (p.saved) {
+      $('status').insertAdjacentHTML('beforeend',
+        `<p><a href="/view/${p.appid}">Open the saved journey</a> · <button class="ghost" id="rebuild">Rebuild</button></p>`);
+      $('rebuild').onclick = async () => {
+        $('rebuild').disabled = true;
+        try { await build(p.appid, p.canonical_name, $('llm').checked); }
+        catch (err) { $('status').insertAdjacentHTML('beforeend', `<p class="warn">${esc(err.message)}</p>`); }
+      };
+    } else {
+      await build(p.appid, p.canonical_name, $('llm').checked);
+    }
+  } catch (err) {
+    $('status').insertAdjacentHTML('beforeend', `<p class="warn">${esc(err.message)}</p>`);
+  } finally { $('go').disabled = false; }
+});
+
+$('ask-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const q = $('ask-q').value.trim(); if (!q) return;
+  $('ask-out').innerHTML = '<p class="muted">Thinking — the agent is calling tools…</p>';
+  try {
+    const d = await getJSON('/api/ask', {method: 'POST', headers: {'Content-Type': 'application/json'},
+                                         body: JSON.stringify({question: q})});
+    const trace = d.provenance.map(p => `<li><code>${esc(p.tool)}(${esc(JSON.stringify(p.args))})</code></li>`).join('');
+    const cost = d.usage ? ` · $${d.usage.cost_usd.toFixed(4)}` : '';
+    $('ask-out').innerHTML = `<div class="answer">${esc(d.answer).replace(/\n/g, '<br>')}</div>
+      <details><summary>${d.provenance.length} tool call(s)${cost}</summary><ul>${trace}</ul></details>`;
+  } catch (err) { $('ask-out').innerHTML = `<p class="warn">${esc(err.message)}</p>`; }
+});
+
+loadSaved();
+</script>
+</body>
+</html>
