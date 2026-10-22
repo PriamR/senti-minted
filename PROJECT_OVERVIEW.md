@@ -117,21 +117,26 @@ the product's life. No LLM, no deep crawl. This alone renders the No Man's Sky r
    interior feeds the LLM's view but not the delta halves. Very recent groups whose 3-week tail
    hasn't elapsed are flagged `window_truncated` + `after_days_observed`.
 
-### 5.3 The approval measure — two layers, and why the LLM earns its place
-- `approval_steam` — `voted_up` ratio over the window (free, from review metadata).
-- `approval_llm` — DeepSeek's read of the review **text**, returned *with*:
-  - **drivers** — which features moved approval (e.g. "free updates ↑, technical issues ↓"),
-  - **divisiveness** — is a 60% game *calmly mixed* or *violently split*? Same ratio, opposite
-    product reality; only the text reveals it.
+### 5.3 The approval measure — and why the LLM earns its place
+- `approval_population` / before→after — exact Steam vote counts for the window (free).
+- **Stage 1** (`deepseek-flash`): each of ~200 sampled reviews is labelled — text polarity, and up
+  to 3 aspects from a fixed 14-aspect taxonomy with polarity and confidence.
+- **Aggregation** (plain Python): `approval_text`, **divisiveness** = 2 × the smaller camp (is a
+  60% game *calmly mixed* or *violently split*? Same ratio, opposite product reality; only the text
+  reveals it), per-aspect share / positive share / **impact**.
+- **Stage 2** (`deepseek-v4-pro`): names up to 4 **drivers** from the aspect table, with quotes, and
+  is checked against the numbers. Details in `TECHNICAL_BREAKDOWN.md` §5.
 
 **This is the answer to "why not just read the Steam score":** the ratio tells you *that* approval
 moved; the LLM tells you *why* and *how divided* — which the binary thumbs-up cannot.
 
 ### 5.4 LLM-safety architecture
-The model **narrates over pre-computed numbers**; it never sees raw API responses or holds a key,
-and it can't invent a metric — only describe one the backend already computed. Two-tier model
-strategy keeps cost down: a cheap model for high-volume classification, a capable model reserved
-for synthesis.
+The model **narrates over pre-computed numbers**; it never sees raw API responses or holds a key.
+Every metric is computed in Python from per-review labels; the synthesizer only names and explains
+drivers, and code drops any driver the numbers don't support and flags any percentage that isn't
+in its input. Two-tier model strategy keeps cost down: a cheap model for high-volume
+classification, a capable model reserved for synthesis — measured at 10.3× cheaper than running
+both stages on the capable model (§8).
 
 ---
 
@@ -189,26 +194,72 @@ resolve once, cache, allow manual override.
 
 ---
 
-## 8. What is built and verified today
+## 8. What is built and verified today (measured 22 Oct 2026)
+
+Full method in `TECHNICAL_BREAKDOWN.md`. Every number below comes from a recorded run on No Man's
+Sky (appid 275850); the raw outputs are `data/timeline_275850.json` and
+`data/compare_275850_2018-07-19.json`.
 
 | Capability | Status |
 |---|---|
 | 8-source async API layer (key-safe, smoke-tested) | ✅ 7 live; Reddit pending creds |
-| Full-history approval curve (Steam histogram) | ✅ NMS: 119 months, 47% → 91% |
-| Rolling event groups + asymmetric (7d/21d) windows | ✅ verified on NMS |
-| Per-day event-frequency flagging | ✅ e.g. "5 posts on 2026-05-27" |
-| Approval measure (Steam ratio + LLM drivers + divisiveness) | ✅ distinct drivers per window |
-| Self-contained HTML visualization | ✅ curve + window bands + driver cards |
-| Entity resolution: appid ⟷ IGDB ⟷ official handles | ✅ verified (275850 ⟷ 3225 → handles) |
-| YouTube wild ingestion (top comments, name search) | ✅ 10 videos → 150 comments |
-| **Agentic query layer** (NL question → grounded answer) | ✅ v1 — tool-calling loop, provenance, verified on NMS |
-| Version control | ✅ clean repo, secrets gitignored |
+| Full-history approval curve (Steam histogram) | ✅ NMS: 123 months, 47% → 90% |
+| Events = developer's official announcements, back to launch | ✅ 154 posts (2016-08-07 → 2026-10-12) → 130 after de-dup → 93 groups |
+| Exact before/after approval + z-test for every event group | ✅ 28 of 93 groups significant (|z| ≥ 2) |
+| LLM spend targeted at launch + biggest movers | ✅ launch, Foundation (+24.3 pts), Path Finder (+21.1), Abyss (+17.2), Visions (−12.7), NEXT (−12.5) |
+| Historical windows (any date since launch) | ✅ via Steam's date-range query; the 2016 and 2018 windows are analyzed |
+| Stratified, edit-filtered sample of **200 reviews per window** | ✅ 6 windows × 200 = 1,200 reviews read; 19–36% of fetched reviews excluded as edited after their window |
+| Aspect-based sentiment (14-aspect taxonomy) | ✅ every window: aspect counts, positive share, impact |
+| **Two-tier models** (flash classify → v4-pro synthesize) | ✅ **10.3× cheaper** than single-model on the same window (below) |
+| Drivers validated against the numbers; % in prose checked | ✅ 0 drivers dropped, 0 ungrounded figures across 6 windows |
+| Per-source TTL cache (1 h – 30 d) | ✅ re-run: **99.8% hit rate** (431/432), 1.3 s, $0 |
+| Degraded mode (rule-based lexicon) | ✅ missing key and invalid key (401) both produce a timeline marked `degraded` |
+| FastAPI layer + web page | ✅ all endpoints return valid JSON (below) |
+| Agent v1 → now answers *why* for any window | ✅ "at launch, and why?" → drivers for Aug–Sep 2016, $0.022 |
+| Offline unit tests | ✅ 75 passing (`python -m pytest`) |
 
-**Concrete verified run (No Man's Sky):**
-- 2026-05-27 update (5 same-day posts): window 05-20→06-17, +1.6pts, drivers = exploration↑,
-  content↑, repetitiveness↓, technical↓.
-- 2026-04-08 group (04-08 + 04-14 chained): window 04-01→05-05, drivers = game evolution↑, depth↑,
-  VR optimization↓.
+**Task 1 — two-tier vs single model** (`scripts/compare_models.py`, NEXT window 2018-07-19 → 08-28,
+same 200-review sample, LLM cache bypassed, off-peak prices as of 22 Oct 2026):
+
+| Mode | Classify | Synthesize | Total / window | Reasoning tokens |
+|---|---|---|---|---|
+| Two-tier (flash, thinking off → v4-pro, thinking on) | $0.0107 | $0.0086 | **$0.0193** | 2,680 |
+| Single model (v4-pro, thinking on, both stages) | $0.1861 | $0.0119 | **$0.1980** | 72,964 |
+| Ratio | 17.4× | | **10.3×** | |
+
+Agreement between modes: text approval 80.8% vs 80.6%, divisiveness 0.337 vs 0.343, 4/4 drivers
+and 4/5 top aspects the same.
+
+**Full timeline run:** 6 windows, 66 LLM calls, 129,893 input / 112,652 output tokens, **$0.1368**
+(about $0.023 per window; classification $0.064, synthesis $0.073).
+
+**Task 2 — sample size:** every analyzed window has `n_reviews = 200` (shortfall 0) and an aspect
+table; e.g. launch: exploration 65 mentions (65% positive), performance 60 (27%), expectations 55
+(12%), value 43 (12%).
+
+**Task 3 — endpoints (curl, 22 Oct):** `GET /health` 200 · `GET /api/resolve?q=No Man's Sky` →
+appid 275850, IGDB 3225, launch 2016-08-12 · `GET /api/timelines` · `GET /api/timeline/275850` (saved)
+· `GET /view/275850` 200 · `POST /api/ask` → grounded answer, 5 tool calls, $0.0225.
+
+**Task 4 — cache and degraded mode:** first full run 43% hit rate (pages warmed by the comparison
+run), re-run 99.8%. With the key blanked, and with an invalid key (real 401), both windows tested
+came back `degraded: true`, `method: lexicon`, $0, with drivers from the aspect table.
+
+**What the aspect data shows for NMS** (impact = net positive mentions per substantive review):
+
+| Window | Before → after | Text approval | Divisiveness | `developer` | `expectations` |
+|---|---|---|---|---|---|
+| Launch (Aug 2016) | — → 40% | 43% | 0.78 | −0.02 | −0.23 |
+| Foundation (Nov 2016) | 50% → 74% | 60% | 0.59 | +0.18 | −0.32 |
+| Path Finder (Mar 2017) | 56% → 78% | 63% | 0.60 | +0.35 | −0.25 |
+| NEXT (Jul 2018) | 91% → 78% | 88% | 0.21 | +0.45 | −0.17 |
+| Abyss (Oct 2018) | 79% → 96% | 87% | 0.23 | +0.62 | −0.05 |
+| Visions (Nov 2018) | 97% → 84% | 90% | 0.18 | +0.60 | −0.08 |
+
+The redemption arc, at the aspect level: trust in the developer goes from neutral to the dominant
+positive driver, while the broken-promises complaint fades, and the audience stops being split.
+(NEXT's −12.5 is the honeymoon fading, not NEXT's effect: its first Steam post came two days after
+release, so the "before" half holds the launch spike. See TECHNICAL_BREAKDOWN §12.)
 
 ---
 
@@ -219,16 +270,16 @@ resolve once, cache, allow manual override.
   LLM/embedding scored against the ground-truth seed).
 - **`resolver` module + SQLite entity map** — `GameEntity` with cached, manually-overridable links.
 - **Reddit ingestion** once credentials land (official subreddit ground truth first).
-- **More measures on the same scaffold:** extremity, divisiveness (already computed — surface it),
-  language spread (Steam reviews carry a per-review `language` field — a market-breadth analogue),
-  volume/velocity.
+- **More measures on the same scaffold:** extremity, language spread (Steam reviews carry a
+  per-review `language` field — a market-breadth analogue), volume/velocity. (Divisiveness is now
+  computed and shown.)
+- **Release-date anchoring** for before/after (IGDB release dates or the daily review spike), so a
+  patch whose Steam post lags its release isn't measured from inside its own spike.
+- **Hand-labelled evaluation set** (100–200 reviews) for classifier precision/recall per aspect.
 
 **Medium term**
-- **Historical LLM backfill** — a one-time cacheable backward crawl to analyze the dramatic early
-  windows (2016 launch, 2018 NEXT recovery) where the big deltas actually live.
-- **Thin FastAPI layer** — wrap `build_timeline` as `GET /api/timeline/{appid}`; point a minimal
-  frontend at the existing JSON. Introduced when interactivity (type-any-game demo) justifies it;
-  presentation moves out of `app/` at that point.
+- ~~Historical LLM backfill~~ — not needed: Steam's date-range query reaches any window (done 22 Oct).
+- ~~Thin FastAPI layer~~ — done 22 Oct (`app/api.py` + a single-page UI).
 - **Cross-source cross-validation** — compare Steam-derived approval against Reddit/YouTube reads
   for the same window as a confidence signal.
 - **Agentic query layer (§10)** — a natural-language agent that orchestrates the backend tools and
@@ -251,8 +302,10 @@ no filters, no clicking, no knowing what an "appid" is.
 > tool surface, the bounded controller (DeepSeek function-calling), and provenance all work. Live
 > verification on No Man's Sky: the "2 years in" query returns the real curve (84%→75%→68%); a
 > "recently, and why" query drives `analyze_window` to a live LLM read of ~3,000 reviews with
-> drivers + divisiveness. Still minimal: the resolver is live-resolution (no SQLite map yet), and
-> `analyze_window` is gated to recent windows pending the historical backfill.
+> drivers + divisiveness. Still minimal: the resolver is live-resolution (no SQLite map yet).
+> *Update 22 Oct 2026:* `analyze_window` now reaches any window since launch (Steam date-range
+> query), so the "2 years in" and "at launch" questions get real drivers; it is also served at
+> `POST /api/ask`.
 
 ### 10.1 Why an agent fits *this* tool specifically
 It's the natural extension of the existing safety principle (§5.4): the LLM **narrates over
@@ -383,25 +436,31 @@ interface**, and the "complicated dashboard" never needs to exist.
 
 ## 12. Tech stack & repo map
 
-**Stack:** Python 3.11 · `httpx` (async) · `python-dotenv` · DeepSeek via the OpenAI-compatible SDK
-· inline-SVG HTML (no frontend framework yet).
+**Stack:** Python 3.11 · `httpx` (async) · `python-dotenv` · DeepSeek (`deepseek-flash`,
+`deepseek-v4-pro`) via the OpenAI-compatible SDK · FastAPI + uvicorn · SQLite cache · pytest ·
+inline-SVG HTML (no frontend framework).
 
 ```
 app/
-  config.py            keys from .env → OS env; missing-key diagnostics
-  clients/             steam, steamspy, itad, rawg, igdb, youtube, reddit, deepseek
+  config.py            keys from .env → OS env; model tiers; cache path
+  cache.py             SQLite per-source TTL cache
+  clients/             steam, steamspy, itad, rawg, igdb, youtube, reddit, deepseek (tiers, cost ledger)
   ingest/              youtube (wild name-search ingestion); reddit (planned)
-  measures/            Measure protocol + approval (Steam ratio + LLM drivers/divisiveness)
-  pipeline/timeline.py baseline curve + rolling event groups + windowed analysis
-  resolver/            appid ⟷ IGDB ⟷ official handles + entity map        (planned, §6)
-  agent/               tool registry + bounded controller + answer object  (planned, §10)
-  viz.py               timeline JSON → self-contained HTML
+  measures/            Measure protocol; approval (2-stage LLM), aspects (all the maths), lexicon (fallback)
+  pipeline/            timeline (baseline → events → movement → selection → analysis), sampling
+  resolver/            name → appid → IGDB id, launch date (SQLite entity map planned, §6)
+  agent/               tool registry + bounded controller
+  api.py, web/         FastAPI layer + single-page UI
+  store.py, viz.py     saved timelines; timeline JSON → self-contained HTML
 scripts/
   build_timeline.py    CLI: appid → data/timeline_<appid>.json + out/<appid>.html
-  ask.py               agent CLI: natural-language question → grounded answer (planned, §10)
+  compare_models.py    two-tier vs single-model cost on one window
+  ask.py               agent CLI: natural-language question → grounded answer
   smoke_test.py        one live call per API
+tests/                 75 offline unit tests
 PLANNING.md            working design notes
 README.md              quick start
+TECHNICAL_BREAKDOWN.md how every number is made
 PROJECT_OVERVIEW.md    this document
 ```
 

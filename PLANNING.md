@@ -27,9 +27,10 @@ comments can't be cleanly date-windowed. So:
 ## Architecture (two layers)
 
 1. **Baseline curve** — Steam histogram → monthly approval points across all of history (free).
-2. **Event windows** — cluster Steam-News events, then for the most-recent reachable ones take a
-   **±5-day window**, sample the review text in it, and run the approval `Measure` (DeepSeek) →
-   `approval_llm` + **drivers** + before/after delta. Drivers (the "why") are the whole point — the
+2. **Event windows** — group the developer's official Steam announcements, measure exact
+   before/after approval for every group (free), then for the launch and the biggest significant
+   movers sample ~200 reviews and run the approval `Measure` (DeepSeek, two tiers) → aspect table,
+   `approval_text`, divisiveness and validated **drivers**. Drivers (the "why") are the whole point — the
    raw thumbs-up ratio can't tell you *which features* moved sentiment, or whether a 60% game is
    calmly mixed vs violently split (divisiveness).
 
@@ -48,30 +49,42 @@ anchored to flagged events (`group_events`):
   feeds the LLM's view but not the delta halves. Very recent groups whose +3-week tail runs past
   today are flagged `window_truncated` with `after_days_observed`.
 
-### Cost / reachability (validated)
-Steam has no "reviews between A and B" param, so historical text needs a backward `filter=recent`
-crawl. Crawl depth scales with the title's review velocity: NMS (~95 reviews/day) needs ~88 pages
-(~80s) to reach back ~10 weeks. v0 therefore LLM-analyzes the most-recent reachable events (the
-`until_ts` adaptive stop + `--max-pages` safety cap) while the free histogram delivers the full
-curve. Deep-history LLM backfill is a one-time cacheable batch job — noted, not built.
+### Cost / reachability (revised 22 Oct 2026)
+~~Steam has no "reviews between A and B" param~~ — it does. `appreviews` accepts `start_date`,
+`end_date` and `date_range_type=include` (undocumented; the store's histogram uses them), verified on
+NMS's August 2016 launch. Any window is now one query away, and the first page's `query_summary`
+gives that window's exact up/down counts. The backward crawl (`iter_reviews`) is kept only for
+whole-history walks; the historical backfill is no longer needed.
+
+Two consequences found while building on it (details in TECHNICAL_BREAKDOWN.md):
+- **Edits contaminate history.** Steam serves a review's *current* text and vote. On NMS launch day
+  26% of reviews were edited >30 days later (80% positive vs 60% for unedited). The sampler excludes
+  reviews edited more than 7 days after their window.
+- **The histogram and date-range counts disagree** (NMS Aug 2016: 47% vs 56%). The gap fits the
+  histogram binning reviews by last edit. The curve uses the histogram; window stats use creation
+  dates; the edit-filtered sample (45%) sides with the histogram.
 
 ## Code map
 
-- `app/clients/steam.py` — `get_review_histogram`, `iter_reviews` (cursor-paged, one reused
-  connection, retry/backoff, `until_ts` adaptive stop), `get_news`.
-- `app/measures/` — `Measure` protocol + `approval.py` (`approval_steam`, `approval_llm`,
-  divisiveness, drivers, summary). The seam for extremity / language-spread / etc.
-- `app/pipeline/timeline.py` — `build_baseline`, `get_events`, `group_events` (rolling chains +
-  per-day frequency: `day_counts`/`peak_day_count`), `analyze_events`, `build_timeline`.
-- `app/viz.py` — self-contained inline-SVG HTML (curve + event markers + driver cards).
+- `app/clients/steam.py` — `get_review_histogram`, `get_reviews_page` / `get_window_summary`
+  (date-range queries), `get_news` (official feed), `iter_reviews` (legacy crawl).
+- `app/pipeline/sampling.py` — stratified, edit-filtered review sampler for any window.
+- `app/measures/` — `Measure` protocol; `approval.py` (two-stage LLM), `aspects.py` (taxonomy and
+  all the maths), `lexicon.py` (fallback). The seam for extremity / language-spread / etc.
+- `app/pipeline/timeline.py` — `build_baseline`, `get_events`, `group_events`, `measure_movement`,
+  `select_windows`, `analyze_window`, `build_timeline`.
+- `app/cache.py` — per-source TTL cache. `app/api.py` + `app/web/` — FastAPI + page.
+- `app/viz.py` — self-contained inline-SVG HTML (curve, movement ticks, driver + aspect cards).
 - `scripts/build_timeline.py` — CLI; writes `data/timeline_<appid>.json` + `out/timeline_<appid>.html`.
 
 ## Run it
 
 ```bash
 python -m scripts.build_timeline 275850 --name "No Man's Sky"            # full (LLM)
-python -m scripts.build_timeline 275850 --name "No Man's Sky" --no-llm   # curve only, no tokens
-# tuning: --before-days 7  --after-days 21  --chain-gap-days 7  --max-events N  --max-pages 60
+python -m scripts.build_timeline 275850 --name "No Man's Sky" --no-llm   # rule-based, no tokens
+python -m scripts.build_timeline 275850 --curve-only                     # curve + movement only
+# tuning: --select movers|recent|all  --max-events 6  --sample-reviews 200  --language english
+#         --before-days 7  --after-days 21  --chain-gap-days 7  --single-model  --no-llm-cache
 ```
 
 ## Cross-source entity resolution (Reddit / YouTube → Steam appid)
@@ -134,7 +147,10 @@ historical spine. Top-of-all-time subreddit posts can backfill *some* history.
 
 ## Known refinements / next steps
 
-- Asymmetric event windows (longer "after").
-- Cache crawled reviews per appid so re-runs and deep-history backfill are cheap.
+- ~~Asymmetric event windows~~ (done). ~~Cache crawled reviews~~ (done: SQLite TTL cache).
+- Anchor "before" on the real release date, not the first Steam post (NEXT shipped 24 Jul 2018;
+  its first post is 26 Jul, so its "before" half catches the release spike).
+- A small human-labelled set to measure classifier accuracy (today only cross-model agreement is
+  measured).
 - Cross-validate recent windows with Reddit/YouTube.
-- A second demo title with lower review velocity (cheaper deep crawl, more event cards).
+- A second demo title with lower review velocity.
