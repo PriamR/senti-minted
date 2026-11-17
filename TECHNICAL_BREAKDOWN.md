@@ -5,7 +5,7 @@
 a live check made while building it; nothing is projected.*
 
 Companion docs: `README.md` (how to run), `PLANNING.md` (design notes), `PROJECT_OVERVIEW.md`
-(product framing, interview narrative).
+(product framing and design decisions).
 
 ---
 
@@ -357,7 +357,7 @@ reasoning; writing the summary does, which is why only stage 2 has thinking on.
 **What this shows and what it doesn't.** It shows the cheap path gives the same window-level
 numbers as the expensive one on this window. It doesn't show either is *correct*: two models can
 agree and both be wrong. That needs a hand-labelled set (§12). The baseline here is "everything on
-the capable model with thinking on", as the handoff specified. Against v4-pro with thinking *off*
+the capable model with thinking on", as originally planned. Against v4-pro with thinking *off*
 for classification, the gap would be roughly the price ratio (3–4×); that wasn't measured.
 
 ---
@@ -534,19 +534,7 @@ value −, performance −, content −, and exploration as the bright spot, and
   and have no auth. Fine on localhost, not for a public deploy.
 - **YouTube and Reddit are not in the timeline yet.** Discussion-thread analysis is still Phase 2.
 
-## 13. CV claims, now checked against the code
-How the 22 Oct handoff's claim table stands after this build:
-
-| Claim | Status now | Wording the evidence supports |
-|---|---|---|
-| "FastAPI backend integrating 8 external APIs" | FastAPI built. 8 async clients exist, 7 live (Reddit pending). The FastAPI flows use Steam, RAWG, IGDB and DeepSeek; ITAD/SteamSpy/YouTube are smoke-tested but not yet behind an endpoint | "FastAPI backend over async clients for 8 external APIs (7 live)" |
-| "two-tier model strategy… cutting inference cost roughly 10x" | **Measured: 10.3×** per window (17.4× on classification), same outputs | true as stated; cite one measured window |
-| "feature-level sentiment across 200+ reviews and 50 discussion threads per title" | 200 reviews **per window** × 6 windows = 1,200 per title, aspect level. **Discussion threads: still not built** | "aspect-level sentiment over 1,200 sampled reviews per title"; drop "50 discussion threads" until Phase 2 |
-| "TTL-based caching (1 hour to 30 days per source) and graceful-degradation fallbacks, including a rule-based sentiment path" | **True:** TTLs 1 h (ITAD) to 30 d (RAWG/IGDB/LLM); 99.8% re-run hit rate; lexicon fallback verified with missing and invalid keys | true as stated |
-| "the LLM narrates over pre-computed signals… eliminate hallucinated metrics" | Stronger than before: the LLM-estimated approval and divisiveness are gone; drivers are validated; percentages are checked. "Eliminate" overstates it (counts in prose aren't checked) | "…with code-level checks that reject unsupported drivers and flag ungrounded figures" |
-| "quantifies the expectation gap between pre-launch hype and post-launch reception at the feature level" | Still not built (no pre-launch data). What exists: the post-launch `expectations` aspect tracked over time | "tracks broken-promises sentiment over a product's life (−0.32 → −0.05 for NMS)"; keep pre-launch for Phase 3 |
-
-## 14. File map
+## 13. File map
 ```
 app/config.py            keys (.env first), model tiers, cache path
 app/cache.py             SQLite per-source TTL cache, hit-rate stats

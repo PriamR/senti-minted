@@ -26,7 +26,7 @@ from .config import settings
 HOUR = 3600
 DAY = 24 * HOUR
 
-# Suggested in the 22 Oct handoff; review pages split by whether the window is closed.
+# Per-source TTLs; review pages split by whether the window is closed.
 TTL: dict[str, float] = {
     "steam_histogram": 24 * HOUR,
     "steam_news": 6 * HOUR,

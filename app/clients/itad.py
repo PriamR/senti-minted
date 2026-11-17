@@ -1,6 +1,6 @@
 """IsThereAnyDeal — pricing & deal data (v2 API).
 
-Endpoints verified against the working Game Spending Website tool:
+Endpoints verified with live calls:
   - GET  /games/lookup/v1?key=&title=  (or &appid=)  -> {found, game:{id}}
   - POST /games/overview/v2?key=&country=US  body=[ "<uuid>", ... ]
         (Content-Type text/plain to avoid the JSON CORS preflight ITAD blocks)

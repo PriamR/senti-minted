@@ -413,28 +413,7 @@ interface**, and the "complicated dashboard" never needs to exist.
 
 ---
 
-## 11. What this project demonstrates (interview framing)
-
-**Product thinking**
-- Found a defensible wedge (vertical depth + analytical frame) against commoditized horizontal tools.
-- Scoped honestly around hard constraints rather than overpromising.
-- Designed the output around the *question a user actually asks* ("did the launch land, and why").
-
-**Technical depth**
-- Multi-source integration with real entity resolution (deterministic + probabilistic tiers).
-- LLM-as-narrator-over-computed-numbers — a safe, production-shaped AI architecture.
-- Cost-, rate-, and failure-aware data pipeline (adaptive crawl, caching strategy, graceful
-  degradation).
-
-**Engineering maturity**
-- Clean layering with a stable JSON contract that makes future frontend/API work cheap.
-- Empirical de-risking (verified the histogram endpoint, the IGDB mappings, the ingestion live
-  before committing to them).
-- Disciplined version control and secret handling from day one.
-
----
-
-## 12. Tech stack & repo map
+## 11. Tech stack & repo map
 
 **Stack:** Python 3.11 · `httpx` (async) · `python-dotenv` · DeepSeek (`deepseek-flash`,
 `deepseek-v4-pro`) via the OpenAI-compatible SDK · FastAPI + uvicorn · SQLite cache · pytest ·

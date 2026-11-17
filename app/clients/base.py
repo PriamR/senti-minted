@@ -6,7 +6,7 @@ import httpx
 DEFAULT_TIMEOUT = httpx.Timeout(20.0, connect=10.0)
 
 # A polite, identifiable UA. Steam's storefront endpoints behave better with one.
-USER_AGENT = "SentiMinted/0.1 (+https://github.com/Priyam/senti-minted)"
+USER_AGENT = "SentiMinted/0.1 (+https://github.com/PriamR/senti-minted)"
 
 
 def make_client(**kwargs) -> httpx.AsyncClient:
